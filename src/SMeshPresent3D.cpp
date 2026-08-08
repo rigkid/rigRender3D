@@ -8,7 +8,9 @@
 #include "CFaceSelection.h"
 #include "CIndexedAtlas.h"
 #include "CPalette.h"
+#include "CSphere.h"
 #include "CTransform.h"
+#include "PrimitiveVertices3D.h"
 #include "SHierarchy.h"
 #include "shaders/BlitShader.h"
 #include "shaders/MeshShader.h"
@@ -747,16 +749,27 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 
 	auto drawOne = [&](entt::entity entity) {
 		if (!ecs.registry().valid(entity) || !ecs.hasComponent<CTransform>(entity) ||
-			!ecs.hasComponent<CMesh>(entity) || !ecs.hasComponent<CDrawStyle>(entity)) {
+			!ecs.hasComponent<CDrawStyle>(entity)) {
 			return;
 		}
-		drawMesh(gl, ecs.getComponent<CTransform>(entity), ecs.getComponent<CMesh>(entity),
-				 ecs.getComponent<CDrawStyle>(entity), viewProj, light, palette, atlas, presentW,
-				 presentH);
-		if (ecs.hasComponent<CFaceSelection>(entity)) {
-			drawFaceSelection(gl, ecs.getComponent<CTransform>(entity),
-							  ecs.getComponent<CMesh>(entity),
-							  ecs.getComponent<CFaceSelection>(entity), viewProj);
+		const auto& transform = ecs.getComponent<CTransform>(entity);
+		const auto& style = ecs.getComponent<CDrawStyle>(entity);
+		if (ecs.hasComponent<CMesh>(entity)) {
+			const auto& mesh = ecs.getComponent<CMesh>(entity);
+			drawMesh(gl, transform, mesh, style, viewProj, light, palette, atlas, presentW,
+					 presentH);
+			if (ecs.hasComponent<CFaceSelection>(entity)) {
+				drawFaceSelection(gl, transform, mesh, ecs.getComponent<CFaceSelection>(entity),
+								  viewProj);
+			}
+		} else if (ecs.hasComponent<CSphere>(entity)) {
+			// Parametric primitive: rebuild the loose triangle soup fresh, same deal as
+			// the 2D shapes in rigSystems — CSphere stays the live data, not CMesh.
+			CMesh sphereMesh;
+			sphereMesh.mode = CMesh::Mode::Triangles;
+			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));
+			drawMesh(gl, transform, sphereMesh, style, viewProj, light, palette, atlas, presentW,
+					 presentH);
 		}
 	};
 
@@ -767,6 +780,10 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 	} else {
 		auto meshes = ecs.view<CTransform, CMesh, CDrawStyle>();
 		for (auto entity : meshes) {
+			drawOne(entity);
+		}
+		auto spheres = ecs.view<CTransform, CSphere, CDrawStyle>();
+		for (auto entity : spheres) {
 			drawOne(entity);
 		}
 	}
