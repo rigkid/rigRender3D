@@ -1,0 +1,16 @@
+{
+  "name": "rigRender3D",
+  "url": "https://github.com/rigkid/rigRender3D.git",
+  "ref": "main",
+  "version": "0.1.0",
+  "author": "Rigkid",
+  "license": "MIT Rigkid Contributors",
+  "description": "GLES mesh present over CCamera + CMesh (Pi floor).",
+  "dependencies": [
+    "rigComponent",
+    "rigSystems"
+  ],
+  "include_paths": [
+    "src"
+  ]
+}

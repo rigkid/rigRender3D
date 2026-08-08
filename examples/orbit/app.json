@@ -1,0 +1,24 @@
+{
+  "name": "orbit",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "rigRender3D hero — low-poly planet, orbiting moons, and a circling light",
+  "window": { "width": 800, "height": 600, "title": "rigRender3D — orbit" },
+  "dependencies": [
+    {
+      "name": "rigComponent",
+      "url": "https://github.com/rigkid/rigComponent.git",
+      "ref": "main"
+    },
+    {
+      "name": "rigSystems",
+      "url": "https://github.com/rigkid/rigSystems.git",
+      "ref": "main"
+    },
+    {
+      "name": "rigRender3D",
+      "url": "https://github.com/rigkid/rigRender3D.git",
+      "ref": "main"
+    }
+  ]
+}
