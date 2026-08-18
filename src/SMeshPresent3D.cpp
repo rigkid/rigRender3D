@@ -8,8 +8,11 @@
 #include "CFaceSelection.h"
 #include "CIndexedAtlas.h"
 #include "CPalette.h"
+#include "CSelection.h"
 #include "CSphere.h"
 #include "CTransform.h"
+#include "CVertexSelection.h"
+#include "MeshFaces.h"
 #include "PrimitiveVertices3D.h"
 #include "SHierarchy.h"
 #include "shaders/BlitShader.h"
@@ -430,8 +433,7 @@ void buildTriangleVerts(const CMesh& mesh, const CDrawStyle& style, const CPalet
 	const bool useAtlas =
 		palette && atlas && mesh.texcoords.size() == mesh.positions.size() && !p.empty();
 	const bool usePalette = !useAtlas && palette && !mesh.facePalette.empty();
-	size_t face = 0;
-	auto emit = [&](uint32_t i0, uint32_t i1, uint32_t i2) {
+	auto emit = [&](uint32_t i0, uint32_t i1, uint32_t i2, size_t faceIndex) {
 		if (i0 >= p.size() || i1 >= p.size() || i2 >= p.size()) {
 			return;
 		}
@@ -445,8 +447,8 @@ void buildTriangleVerts(const CMesh& mesh, const CDrawStyle& style, const CPalet
 		if (useAtlas) {
 			const glm::vec2 uv = faceUvCentroid(mesh, i0, i1, i2);
 			idx = static_cast<int>(atlas->sample(uv.x, uv.y));
-		} else if (usePalette && face < mesh.facePalette.size()) {
-			idx = static_cast<int>(mesh.facePalette[face]);
+		} else if (usePalette && faceIndex < mesh.facePalette.size()) {
+			idx = static_cast<int>(mesh.facePalette[faceIndex]);
 		}
 		if (idx >= 0 && palette) {
 			if (light.mode != 0 && light.banded) {
@@ -495,22 +497,35 @@ void buildTriangleVerts(const CMesh& mesh, const CDrawStyle& style, const CPalet
 				c = palette->color(idx);
 			}
 		} else {
-			c = faceColor(mesh, style, face);
+			c = faceColor(mesh, style, faceIndex);
 		}
-		++face;
 		pushVert(verts, p[i0], nLocal, c);
 		pushVert(verts, p[i1], nLocal, c);
 		pushVert(verts, p[i2], nLocal, c);
 	};
 
-	if (mesh.indices.empty()) {
-		for (size_t i = 0; i + 2 < p.size(); i += 3) {
+	if (!mesh.loopSizes.empty()) {
+		const uint32_t nFaces = meshFaceCount(mesh);
+		for (uint32_t f = 0; f < nFaces; ++f) {
+			uint32_t begin = 0, count = 0;
+			if (!meshFaceRange(mesh, f, begin, count)) {
+				continue;
+			}
+			const uint32_t i0 = meshFaceCorner(mesh, f, 0);
+			for (uint32_t k = 1; k + 1 < count; ++k) {
+				emit(i0, meshFaceCorner(mesh, f, k), meshFaceCorner(mesh, f, k + 1), f);
+			}
+		}
+	} else if (mesh.indices.empty()) {
+		size_t face = 0;
+		for (size_t i = 0; i + 2 < p.size(); i += 3, ++face) {
 			emit(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1),
-				 static_cast<uint32_t>(i + 2));
+				 static_cast<uint32_t>(i + 2), face);
 		}
 	} else {
-		for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-			emit(mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2]);
+		size_t face = 0;
+		for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3, ++face) {
+			emit(mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2], face);
 		}
 	}
 }
@@ -632,26 +647,121 @@ void drawFaceSelection(Present3DGl& gl, const CTransform& transform, const CMesh
 	};
 
 	for (uint32_t face : sel.faces) {
-		uint32_t i0 = 0, i1 = 0, i2 = 0;
-		if (!mesh.indices.empty()) {
-			const size_t base = static_cast<size_t>(face) * 3;
-			if (base + 2 >= mesh.indices.size()) {
-				continue;
-			}
-			i0 = mesh.indices[base];
-			i1 = mesh.indices[base + 1];
-			i2 = mesh.indices[base + 2];
-		} else {
-			i0 = face * 3;
-			i1 = face * 3 + 1;
-			i2 = face * 3 + 2;
-			if (i2 >= p.size()) {
-				continue;
-			}
+		uint32_t begin = 0, count = 0;
+		if (!meshFaceRange(mesh, face, begin, count)) {
+			continue;
 		}
-		emitEdge(i0, i1);
-		emitEdge(i1, i2);
-		emitEdge(i2, i0);
+		for (uint32_t c = 0; c < count; ++c) {
+			emitEdge(meshFaceCorner(mesh, face, c), meshFaceCorner(mesh, face, (c + 1) % count));
+		}
+	}
+	if (verts.empty()) {
+		return;
+	}
+
+	const glm::mat4 mvp = viewProj * transform.world;
+	glUseProgram(gl.program);
+	glUniformMatrix4fv(gl.uMvp, 1, GL_FALSE, glm::value_ptr(mvp));
+	glUniformMatrix4fv(gl.uModel, 1, GL_FALSE, glm::value_ptr(transform.world));
+	glUniform1f(gl.uLightMode, 0.0f);
+	glUniform1f(gl.uBanded, 0.0f);
+	glUniform1f(gl.uDither, 0.0f);
+	glLineWidth(2.0f);
+
+	glDepthFunc(GL_LEQUAL);
+	glBindVertexArray(gl.vao);
+	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+				 verts.data(), GL_DYNAMIC_DRAW);
+	glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size() / 10));
+	glBindVertexArray(0);
+	glDepthFunc(GL_LESS);
+	glLineWidth(1.0f);
+}
+
+void drawVertexSelection(Present3DGl& gl, const CTransform& transform, const CMesh& mesh,
+						 const CVertexSelection& sel, const glm::mat4& viewProj) {
+	if (sel.vertices.empty() || mesh.positions.empty()) {
+		return;
+	}
+
+	// Draw selected verts as tiny axis-aligned crosses (GLES-friendly, no point sprites).
+	std::vector<float> verts;
+	const glm::vec3 n{0.f, 0.f, 1.f};
+	const glm::vec4 col{0.2f, 0.95f, 1.f, 1.f};
+	const auto& p = mesh.positions;
+	float extent = 0.06f;
+	for (const auto& pos : p) {
+		extent = std::max(extent, glm::length(pos) * 0.02f);
+	}
+	extent = std::clamp(extent, 0.03f, 0.2f);
+
+	auto emitSeg = [&](const glm::vec3& a, const glm::vec3& b) {
+		pushVert(verts, a, n, col);
+		pushVert(verts, b, n, col);
+	};
+
+	for (uint32_t vi : sel.vertices) {
+		if (vi >= p.size()) {
+			continue;
+		}
+		const glm::vec3 c = p[vi];
+		emitSeg(c + glm::vec3(extent, 0.f, 0.f), c - glm::vec3(extent, 0.f, 0.f));
+		emitSeg(c + glm::vec3(0.f, extent, 0.f), c - glm::vec3(0.f, extent, 0.f));
+		emitSeg(c + glm::vec3(0.f, 0.f, extent), c - glm::vec3(0.f, 0.f, extent));
+	}
+	if (verts.empty()) {
+		return;
+	}
+
+	const glm::mat4 mvp = viewProj * transform.world;
+	glUseProgram(gl.program);
+	glUniformMatrix4fv(gl.uMvp, 1, GL_FALSE, glm::value_ptr(mvp));
+	glUniformMatrix4fv(gl.uModel, 1, GL_FALSE, glm::value_ptr(transform.world));
+	glUniform1f(gl.uLightMode, 0.0f);
+	glUniform1f(gl.uBanded, 0.0f);
+	glUniform1f(gl.uDither, 0.0f);
+	glLineWidth(2.0f);
+
+	glDepthFunc(GL_LEQUAL);
+	glBindVertexArray(gl.vao);
+	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+				 verts.data(), GL_DYNAMIC_DRAW);
+	glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size() / 10));
+	glBindVertexArray(0);
+	glDepthFunc(GL_LESS);
+	glLineWidth(1.0f);
+}
+
+void drawObjectWireframe(Present3DGl& gl, const CTransform& transform, const CMesh& mesh,
+						 const glm::mat4& viewProj) {
+	if (mesh.mode != CMesh::Mode::Triangles || mesh.positions.empty()) {
+		return;
+	}
+
+	std::vector<float> verts;
+	const glm::vec3 n{0.f, 0.f, 1.f};
+	const glm::vec4 edge{1.f, 0.75f, 0.25f, 1.f};
+	const auto& p = mesh.positions;
+
+	auto emitEdge = [&](uint32_t a, uint32_t b) {
+		if (a >= p.size() || b >= p.size()) {
+			return;
+		}
+		pushVert(verts, p[a], n, edge);
+		pushVert(verts, p[b], n, edge);
+	};
+
+	const uint32_t nFaces = meshFaceCount(mesh);
+	for (uint32_t face = 0; face < nFaces; ++face) {
+		uint32_t begin = 0, count = 0;
+		if (!meshFaceRange(mesh, face, begin, count)) {
+			continue;
+		}
+		for (uint32_t c = 0; c < count; ++c) {
+			emitEdge(meshFaceCorner(mesh, face, c), meshFaceCorner(mesh, face, (c + 1) % count));
+		}
 	}
 	if (verts.empty()) {
 		return;
@@ -689,7 +799,7 @@ float maxAliasedLineWidth() {
 }
 
 void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarchy,
-					const entt::entity* only, std::size_t onlyCount) {
+					const entt::entity* only, std::size_t onlyCount, int originX, int originY) {
 	if (viewportW <= 0 || viewportH <= 0) {
 		return;
 	}
@@ -738,9 +848,26 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 		glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
 		glClearColor(clear[0], clear[1], clear[2], clear[3]);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, presentW, presentH);
+	} else {
+		const int vx = originX;
+		const int vy = originY;
+		glViewport(vx, vy, presentW, presentH);
+		if (vx != 0 || vy != 0) {
+			// Clear only the bed so dock chrome keeps the prior window clear.
+			GLint prevScissor[4] = {0, 0, 0, 0};
+			GLboolean scissorWas = glIsEnabled(GL_SCISSOR_TEST);
+			glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
+			glEnable(GL_SCISSOR_TEST);
+			glScissor(vx, vy, presentW, presentH);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			if (!scissorWas) {
+				glDisable(GL_SCISSOR_TEST);
+			}
+			glScissor(prevScissor[0], prevScissor[1], prevScissor[2], prevScissor[3]);
+		}
 	}
 
-	glViewport(0, 0, presentW, presentH);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
 	glDisable(GL_CULL_FACE);
@@ -758,9 +885,23 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 			const auto& mesh = ecs.getComponent<CMesh>(entity);
 			drawMesh(gl, transform, mesh, style, viewProj, light, palette, atlas, presentW,
 					 presentH);
-			if (ecs.hasComponent<CFaceSelection>(entity)) {
+			const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
+								 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
+			const bool vertSel = ecs.hasComponent<CVertexSelection>(entity) &&
+								 !ecs.getComponent<CVertexSelection>(entity).vertices.empty();
+			if (faceSel) {
 				drawFaceSelection(gl, transform, mesh, ecs.getComponent<CFaceSelection>(entity),
 								  viewProj);
+			}
+			if (vertSel) {
+				drawVertexSelection(gl, transform, mesh,
+									ecs.getComponent<CVertexSelection>(entity), viewProj);
+			}
+			if (!faceSel && !vertSel && ecs.hasComponent<CSelection>(entity)) {
+				const auto& sel = ecs.getComponent<CSelection>(entity);
+				if (sel.isSelected || sel.isMultiSelected) {
+					drawObjectWireframe(gl, transform, mesh, viewProj);
+				}
 			}
 		} else if (ecs.hasComponent<CSphere>(entity)) {
 			// Parametric primitive: rebuild the loose triangle soup fresh, same deal as

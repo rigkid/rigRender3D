@@ -11,13 +11,16 @@ namespace ecs {
  * @brief Present `CMesh` entities through the active `CCamera` (GLES / desktop GL).
  * @details Calls `SHierarchy` first unless @p resolveHierarchy is false (caller already
  * filled `CTransform::world`). No-op without an active camera.
- * @param viewportW Window framebuffer width.
- * @param viewportH Window framebuffer height.
+ * @param viewportW Present width in framebuffer pixels (aspect + glViewport size).
+ * @param viewportH Present height in framebuffer pixels.
  * @param resolveHierarchy When false, skip `SHierarchy` (panel / offscreen present).
  * @param only When non-null and count > 0, only these entities are drawn.
+ * @param originX Framebuffer X of the GL viewport (bed origin; default full window).
+ * @param originY Framebuffer Y of the GL viewport (OpenGL bottom-left space).
  */
 void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarchy = true,
-					const entt::entity* only = nullptr, std::size_t onlyCount = 0);
+					const entt::entity* only = nullptr, std::size_t onlyCount = 0,
+					int originX = 0, int originY = 0);
 
 /**
  * @brief Widest aliased line this GL driver will draw, in pixels.
