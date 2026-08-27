@@ -1,11 +1,13 @@
 #include "rigRender3D.h"
-#include <spdlog/spdlog.h>
-#include "SMeshPresent3D.h"
+
 #include "core/IMui.h"
-#include "core/RigKitEngine.h"
 #include "core/pack/PackRegistry.h"
+#include "core/RigKitEngine.h"
 #include "ecs/MEcs.h"
 #include "ecs/SystemRegistry.h"
+#include "SMeshPresent3D.h"
+
+#include <spdlog/spdlog.h>
 
 namespace rigkit {
 
@@ -35,7 +37,7 @@ void rigRender3D::setup() {
 		int fbW = 0;
 		int fbH = 0;
 		engine->getPresentSize(designW, designH, fbW, fbH);
-		// Match glViewport / HiDPI framebuffer — window size alone letterboxes on Retina.
+		// Match glViewport / HiDPI framebuffer - window size alone letterboxes on Retina.
 		const int fullW = fbW > 0 ? fbW : engine->getWindowWidth();
 		const int fullH = fbH > 0 ? fbH : engine->getWindowHeight();
 

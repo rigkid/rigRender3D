@@ -1,11 +1,7 @@
 #include "app.h"
 
-#include <algorithm>
-#include <cmath>
-
-#include <spdlog/spdlog.h>
-#include "core/RigKitEngine.h"
 #include "core/pack/MPack.h"
+#include "core/RigKitEngine.h"
 #include "packs/rigComponent/src/CLight.h"
 #include "packs/rigComponent/src/COrbitDrive.h"
 #include "packs/rigComponent/src/CSphere.h"
@@ -15,6 +11,10 @@
 #include "packs/rigComponent/src/rigComponent.h"
 #include "packs/rigRender3D/src/rigRender3D.h"
 #include "packs/rigSystems/src/rigSystems.h"
+
+#include <algorithm>
+#include <cmath>
+#include <spdlog/spdlog.h>
 
 namespace {
 
@@ -38,7 +38,7 @@ glm::vec4 planetColor(const glm::vec3& n) {
  * @brief One-off hand-colored planet: bakes `CSphere`'s own tessellation into a
  * `CMesh` so each face can carry its own latitude-mapped color.
  * @details The generic `rig::makeSphere` stays flat-filled (live `CSphere` data,
- * no per-face colors) — reusing `verticesOf` here means this bespoke look never
+ * no per-face colors) - reusing `verticesOf` here means this bespoke look never
  * forks the icosahedron math, just the paint job.
  */
 entt::entity makePlanet(rigkit::MEcs& ecs, float radius, int subdivisions,
@@ -62,7 +62,7 @@ entt::entity makePlanet(rigkit::MEcs& ecs, float radius, int subdivisions,
 } // namespace
 
 void OrbitApp::setup() {
-	spdlog::info("orbit — rigRender3D low-poly planet system (camera + light + mesh present)");
+	spdlog::info("orbit - rigRender3D low-poly planet system (camera + light + mesh present)");
 	m_engine->setClearColor(0.03f, 0.03f, 0.07f, 1.0f);
 
 	auto* packs = m_engine->getPackManager();

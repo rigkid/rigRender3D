@@ -3,10 +3,10 @@
 #include "rendering/U_gladGlfw.h"
 #include "CCamera.h"
 #include "CDrawStyle.h"
-#include "CLight.h"
-#include "CMesh.h"
 #include "CFaceSelection.h"
 #include "CIndexedAtlas.h"
+#include "CLight.h"
+#include "CMesh.h"
 #include "CPalette.h"
 #include "CSelection.h"
 #include "CSphere.h"
@@ -14,14 +14,14 @@
 #include "CVertexSelection.h"
 #include "MeshFaces.h"
 #include "PrimitiveVertices3D.h"
-#include "SHierarchy.h"
 #include "shaders/BlitShader.h"
 #include "shaders/MeshShader.h"
+#include "SHierarchy.h"
 
-#include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <glm/gtc/type_ptr.hpp>
 #include <spdlog/spdlog.h>
 #include <vector>
 
@@ -905,7 +905,7 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 			}
 		} else if (ecs.hasComponent<CSphere>(entity)) {
 			// Parametric primitive: rebuild the loose triangle soup fresh, same deal as
-			// the 2D shapes in rigSystems — CSphere stays the live data, not CMesh.
+			// the 2D shapes in rigSystems - CSphere stays the live data, not CMesh.
 			CMesh sphereMesh;
 			sphereMesh.mode = CMesh::Mode::Triangles;
 			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));

@@ -26,7 +26,7 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
  * @brief Widest aliased line this GL driver will draw, in pixels.
  * @details Line meshes take their width from `CDrawStyle::strokeWidth` clamped to
  * this. Core-profile desktop and GLES parts (Pi included) commonly report 1, i.e.
- * hairlines only — ask before offering a width control so it cannot promise more
+ * hairlines only - ask before offering a width control so it cannot promise more
  * than the device draws. Queried once; needs a current GL context.
  */
 float maxAliasedLineWidth();

@@ -6,9 +6,9 @@ namespace shaders {
 
 /**
  * @brief Fullscreen textured-quad blit, GLES2 and desktop GL 3.3 core variants.
- * @details Draws `uTex` over clip space unchanged — no transform, no lighting.
+ * @details Draws `uTex` over clip space unchanged - no transform, no lighting.
  * Generic enough for any pack that renders to an offscreen color texture (a
- * pixel-present FBO, a compositor layer, …) and needs to present it to the
+ * pixel-present FBO, a compositor layer, ...) and needs to present it to the
  * default framebuffer; not specific to mesh present.
  */
 

@@ -3,7 +3,7 @@
 #include "core/U_core.h"
 
 /**
- * @brief rigRender3D hero — a tiny low-poly planet system.
+ * @brief rigRender3D hero - a tiny low-poly planet system.
  * @details Faceted planet + two orbiting moons, a circling point light, and a
  * camera that orbits the whole scene via `COrbitDrive`. Shows off `CMesh`
  * face colors, `CLight` banded shade, and the GLES/desktop present path in one
@@ -14,7 +14,7 @@ class OrbitApp : public rigkit::IApp {
 	OrbitApp() {
 		window().width = 960;
 		window().height = 600;
-		window().title = "rigRender3D — orbit";
+		window().title = "rigRender3D - orbit";
 	}
 	void setup() override;
 	void update(float dt) override;

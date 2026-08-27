@@ -7,7 +7,7 @@ namespace shaders {
 /**
  * @brief Lit mesh vertex + fragment GLSL, GLES2 and desktop GL 3.3 core variants.
  * @details Per-vertex position/normal/color in, per-fragment Lambert with optional
- * banded (posterized) shade and ordered (Bayer) dither on the band thresholds — see
+ * banded (posterized) shade and ordered (Bayer) dither on the band thresholds - see
  * `SMeshPresent3D.cpp` for the uniform contract (`uMvp`, `uModel`, `uLight*`, `uAmbient`,
  * `uBanded`, `uBands`, `uDither`). Kept as plain GLSL text so any pack presenting
  * `CMesh` + `CLight` can reuse the same lighting model without re-deriving it.
