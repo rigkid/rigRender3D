@@ -21,8 +21,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <glm/gtc/type_ptr.hpp>
 #include <spdlog/spdlog.h>
+#include <unordered_map>
 #include <vector>
 
 namespace rigkit {
@@ -101,6 +103,40 @@ struct Present3DGl {
 	GLuint depthRb = 0;
 	int fboW = 0;
 	int fboH = 0;
+
+	struct MeshGpu {
+		GLuint vbo = 0;
+		GLsizei nVerts = 0;
+		uint64_t stamp = 0;
+		bool used = false;
+	};
+	std::unordered_map<uint32_t, MeshGpu> meshGpu;
+
+	void bindMeshVbo(GLuint buf) {
+		constexpr int kStride = 10;
+		glBindVertexArray(vao);
+		glBindBuffer(GL_ARRAY_BUFFER, buf);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, kStride * sizeof(float),
+							  reinterpret_cast<void*>(0));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, kStride * sizeof(float),
+							  reinterpret_cast<void*>(3 * sizeof(float)));
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, kStride * sizeof(float),
+							  reinterpret_cast<void*>(6 * sizeof(float)));
+	}
+
+	void sweepMeshGpu() {
+		for (auto it = meshGpu.begin(); it != meshGpu.end();) {
+			if (!it->second.used) {
+				if (it->second.vbo) {
+					glDeleteBuffers(1, &it->second.vbo);
+				}
+				it = meshGpu.erase(it);
+			} else {
+				it->second.used = false;
+				++it;
+			}
+		}
+	}
 
 	bool ready = false;
 
@@ -354,6 +390,46 @@ LightFrame findLight(MEcs& ecs) {
 	return out;
 }
 
+uint64_t mixU64(uint64_t h, uint64_t v) {
+	h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+	return h;
+}
+
+uint64_t floatBits(float v) {
+	uint32_t bits = 0;
+	std::memcpy(&bits, &v, sizeof(bits));
+	return bits;
+}
+
+uint64_t meshStamp(const CMesh& mesh, const CDrawStyle& style, const CPalette* palette,
+				   const CIndexedAtlas* atlas) {
+	uint64_t h = mixU64(mesh.revision, mesh.positions.size());
+	h = mixU64(h, mesh.indices.size());
+	h = mixU64(h, mesh.loops.size());
+	h = mixU64(h, mesh.loopSizes.size());
+	h = mixU64(h, mesh.faceColors.size());
+	h = mixU64(h, mesh.facePalette.size());
+	h = mixU64(h, mesh.texcoords.size());
+	h = mixU64(h, static_cast<uint64_t>(mesh.mode));
+	if (!mesh.positions.empty()) {
+		h = mixU64(h, floatBits(mesh.positions.front().x));
+		h = mixU64(h, floatBits(mesh.positions[mesh.positions.size() / 2].y));
+		h = mixU64(h, floatBits(mesh.positions.back().z));
+	}
+	if (!mesh.indices.empty()) {
+		h = mixU64(h, mesh.indices.front());
+		h = mixU64(h, mesh.indices.back());
+	}
+	h = mixU64(h, floatBits(style.fillR));
+	h = mixU64(h, floatBits(style.fillG));
+	h = mixU64(h, floatBits(style.fillB));
+	h = mixU64(h, floatBits(style.fillA));
+	h = mixU64(h, style.hasFill ? 1ull : 0ull);
+	h = mixU64(h, reinterpret_cast<uintptr_t>(palette));
+	h = mixU64(h, reinterpret_cast<uintptr_t>(atlas));
+	return h;
+}
+
 void pushVert(std::vector<float>& verts, const glm::vec3& p, const glm::vec3& n,
 			  const glm::vec4& c) {
 	verts.push_back(p.x);
@@ -564,45 +640,9 @@ void buildLineVerts(const CMesh& mesh, const CDrawStyle& style, std::vector<floa
 	}
 }
 
-void drawMesh(Present3DGl& gl, const CTransform& transform, const CMesh& mesh,
-			  const CDrawStyle& style, const glm::mat4& viewProj, const LightFrame& light,
-			  const CPalette* palette, const CIndexedAtlas* atlas, int presentW, int presentH) {
-	if (mesh.positions.empty()) {
-		return;
-	}
-
-	std::vector<float> verts;
-	GLenum mode = GL_TRIANGLES;
-	int lightMode = light.mode;
-
-	if (mesh.mode == CMesh::Mode::Triangles) {
-		const bool hasAtlasAlbedo =
-			palette && atlas && mesh.texcoords.size() == mesh.positions.size();
-		if (!style.hasFill && mesh.faceColors.empty() && mesh.facePalette.empty() &&
-			!hasAtlasAlbedo) {
-			return;
-		}
-		bool paletteShaded = false;
-		buildTriangleVerts(mesh, style, palette, atlas, light, transform.world, viewProj, presentW,
-						   presentH, verts, paletteShaded);
-		if (paletteShaded) {
-			lightMode = 0;
-		}
-	} else {
-		buildLineVerts(mesh, style, verts);
-		mode = GL_LINES;
-		lightMode = 0;
-	}
-	if (verts.empty()) {
-		return;
-	}
-	if (mode == GL_LINES) {
-		// Over the driver's cap glLineWidth is an error, so clamp rather than trust.
-		glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
-	}
-
+void setMeshLightUniforms(Present3DGl& gl, const CTransform& transform, const glm::mat4& viewProj,
+						  const LightFrame& light, int lightMode) {
 	const glm::mat4 mvp = viewProj * transform.world;
-
 	glUseProgram(gl.program);
 	glUniformMatrix4fv(gl.uMvp, 1, GL_FALSE, glm::value_ptr(mvp));
 	glUniformMatrix4fv(gl.uModel, 1, GL_FALSE, glm::value_ptr(transform.world));
@@ -615,11 +655,82 @@ void drawMesh(Present3DGl& gl, const CTransform& transform, const CMesh& mesh,
 	glUniform1f(gl.uBanded, light.banded ? 1.0f : 0.0f);
 	glUniform1f(gl.uBands, static_cast<float>(light.bands));
 	glUniform1f(gl.uDither, light.dither ? 1.0f : 0.0f);
+}
 
-	glBindVertexArray(gl.vao);
-	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, const CMesh& mesh,
+			  const CDrawStyle& style, const glm::mat4& viewProj, const LightFrame& light,
+			  const CPalette* palette, const CIndexedAtlas* atlas, int presentW, int presentH) {
+	if (mesh.positions.empty()) {
+		return;
+	}
+
+	const bool hasAtlasAlbedo =
+		palette && atlas && mesh.texcoords.size() == mesh.positions.size();
+	const bool bakePaletteShade = palette && light.mode != 0 && light.banded &&
+								  (!mesh.facePalette.empty() || hasAtlasAlbedo);
+	if (mesh.mode == CMesh::Mode::Triangles && !style.hasFill && mesh.faceColors.empty() &&
+		mesh.facePalette.empty() && !hasAtlasAlbedo) {
+		return;
+	}
+
+	GLenum mode = mesh.mode == CMesh::Mode::Triangles ? GL_TRIANGLES : GL_LINES;
+	int lightMode = mode == GL_LINES ? 0 : light.mode;
+	const bool cacheable = id != entt::null && !bakePaletteShade;
+	Present3DGl::MeshGpu* gpu = nullptr;
+	uint64_t stamp = 0;
+	if (cacheable) {
+		stamp = meshStamp(mesh, style, palette, atlas);
+		gpu = &gl.meshGpu[static_cast<uint32_t>(id)];
+		gpu->used = true;
+		if (gpu->vbo && gpu->stamp == stamp && gpu->nVerts > 0) {
+			if (mode == GL_LINES) {
+				glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
+			}
+			setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
+			gl.bindMeshVbo(gpu->vbo);
+			glDrawArrays(mode, 0, gpu->nVerts);
+			glBindVertexArray(0);
+			if (mode == GL_LINES) {
+				glLineWidth(1.0f);
+			}
+			return;
+		}
+	}
+
+	std::vector<float> verts;
+	if (mesh.mode == CMesh::Mode::Triangles) {
+		bool paletteShaded = false;
+		buildTriangleVerts(mesh, style, palette, atlas, light, transform.world, viewProj, presentW,
+						   presentH, verts, paletteShaded);
+		if (paletteShaded) {
+			lightMode = 0;
+		}
+	} else {
+		buildLineVerts(mesh, style, verts);
+		lightMode = 0;
+	}
+	if (verts.empty()) {
+		return;
+	}
+	if (mode == GL_LINES) {
+		// Over the driver's cap glLineWidth is an error, so clamp rather than trust.
+		glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
+	}
+
+	setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
+
+	GLuint upload = gl.vbo;
+	if (gpu) {
+		if (!gpu->vbo) {
+			glGenBuffers(1, &gpu->vbo);
+		}
+		gpu->stamp = stamp;
+		gpu->nVerts = static_cast<GLsizei>(verts.size() / 10);
+		upload = gpu->vbo;
+	}
+	gl.bindMeshVbo(upload);
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-				 verts.data(), GL_DYNAMIC_DRAW);
+				 verts.data(), gpu ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
 	glDrawArrays(mode, 0, static_cast<GLsizei>(verts.size() / 10));
 	glBindVertexArray(0);
 	if (mode == GL_LINES) {
@@ -669,8 +780,7 @@ void drawFaceSelection(Present3DGl& gl, const CTransform& transform, const CMesh
 	glLineWidth(2.0f);
 
 	glDepthFunc(GL_LEQUAL);
-	glBindVertexArray(gl.vao);
-	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+	gl.bindMeshVbo(gl.vbo);
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
 				 verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size() / 10));
@@ -724,8 +834,7 @@ void drawVertexSelection(Present3DGl& gl, const CTransform& transform, const CMe
 	glLineWidth(2.0f);
 
 	glDepthFunc(GL_LEQUAL);
-	glBindVertexArray(gl.vao);
-	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+	gl.bindMeshVbo(gl.vbo);
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
 				 verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size() / 10));
@@ -777,8 +886,7 @@ void drawObjectWireframe(Present3DGl& gl, const CTransform& transform, const CMe
 	glLineWidth(2.0f);
 
 	glDepthFunc(GL_LEQUAL);
-	glBindVertexArray(gl.vao);
-	glBindBuffer(GL_ARRAY_BUFFER, gl.vbo);
+	gl.bindMeshVbo(gl.vbo);
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
 				 verts.data(), GL_DYNAMIC_DRAW);
 	glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(verts.size() / 10));
@@ -788,6 +896,66 @@ void drawObjectWireframe(Present3DGl& gl, const CTransform& transform, const CMe
 }
 
 } // namespace
+
+MeshPresentTarget::~MeshPresentTarget() {
+	destroy();
+}
+
+void MeshPresentTarget::destroy() {
+	if (m_color) {
+		glDeleteTextures(1, &m_color);
+		m_color = 0;
+	}
+	if (m_depth) {
+		glDeleteRenderbuffers(1, &m_depth);
+		m_depth = 0;
+	}
+	if (m_fbo) {
+		glDeleteFramebuffers(1, &m_fbo);
+		m_fbo = 0;
+	}
+	m_w = 0;
+	m_h = 0;
+}
+
+bool MeshPresentTarget::resize(int w, int h) {
+	if (w <= 0 || h <= 0) {
+		return false;
+	}
+	if (m_fbo != 0 && m_w == w && m_h == h) {
+		return true;
+	}
+	destroy();
+
+	glGenTextures(1, &m_color);
+	glBindTexture(GL_TEXTURE_2D, m_color);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+	glGenRenderbuffers(1, &m_depth);
+	glBindRenderbuffer(GL_RENDERBUFFER, m_depth);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, w, h);
+
+	glGenFramebuffers(1, &m_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_color, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depth);
+	const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		spdlog::error("[rigRender3D] view FBO incomplete ({})", static_cast<int>(status));
+		destroy();
+		return false;
+	}
+	m_w = w;
+	m_h = h;
+	return true;
+}
 
 float maxAliasedLineWidth() {
 	static const float wMax = [] {
@@ -800,7 +968,23 @@ float maxAliasedLineWidth() {
 
 void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarchy,
 					const entt::entity* only, std::size_t onlyCount, int originX, int originY) {
-	if (viewportW <= 0 || viewportH <= 0) {
+	entt::entity camEntity = entt::null;
+	for (auto entity : ecs.view<CTransform, CCamera>()) {
+		if (ecs.getComponent<CCamera>(entity).active) {
+			camEntity = entity;
+			break;
+		}
+	}
+	SMeshPresent3D(ecs, camEntity, viewportW, viewportH, resolveHierarchy, only, onlyCount, originX,
+				   originY, 0);
+}
+
+void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewportH,
+					bool resolveHierarchy, const entt::entity* only, std::size_t onlyCount,
+					int originX, int originY, unsigned targetFbo) {
+	if (viewportW <= 0 || viewportH <= 0 || camEntity == entt::null ||
+		!ecs.registry().valid(camEntity) || !ecs.hasComponent<CCamera>(camEntity) ||
+		!ecs.hasComponent<CTransform>(camEntity)) {
 		return;
 	}
 
@@ -808,27 +992,15 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 		SHierarchy(ecs);
 	}
 
-	entt::entity camEntity = entt::null;
-	auto cameras = ecs.view<CTransform, CCamera>();
-	for (auto entity : cameras) {
-		if (cameras.get<CCamera>(entity).active) {
-			camEntity = entity;
-			break;
-		}
-	}
-	if (camEntity == entt::null) {
-		return;
-	}
-
 	auto& gl = glState();
 	if (!gl.ensure()) {
 		return;
 	}
 
-	const auto& cam = cameras.get<CCamera>(camEntity);
-	const auto& camXf = cameras.get<CTransform>(camEntity);
-	const bool pixel =
-		cam.presentWidth > 0 && cam.presentHeight > 0;
+	const auto& cam = ecs.getComponent<CCamera>(camEntity);
+	const auto& camXf = ecs.getComponent<CTransform>(camEntity);
+	const bool offscreen = targetFbo != 0;
+	const bool pixel = !offscreen && cam.presentWidth > 0 && cam.presentHeight > 0;
 	const int presentW = pixel ? cam.presentWidth : viewportW;
 	const int presentH = pixel ? cam.presentHeight : viewportH;
 	const float aspect = static_cast<float>(presentW) / static_cast<float>(presentH);
@@ -838,8 +1010,17 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 	const CIndexedAtlas* atlas = findAtlas(ecs);
 
 	GLint prevFbo = 0;
+	GLint prevVp[4] = {0, 0, 0, 0};
 	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-	if (pixel) {
+	glGetIntegerv(GL_VIEWPORT, prevVp);
+	if (offscreen) {
+		glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
+		GLfloat clear[4] = {0.f, 0.f, 0.f, 1.f};
+		glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
+		glClearColor(clear[0], clear[1], clear[2], clear[3]);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, presentW, presentH);
+	} else if (pixel) {
 		if (!gl.ensureFbo(presentW, presentH)) {
 			return;
 		}
@@ -883,7 +1064,7 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 		const auto& style = ecs.getComponent<CDrawStyle>(entity);
 		if (ecs.hasComponent<CMesh>(entity)) {
 			const auto& mesh = ecs.getComponent<CMesh>(entity);
-			drawMesh(gl, transform, mesh, style, viewProj, light, palette, atlas, presentW,
+			drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
 					 presentH);
 			const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
 								 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
@@ -909,8 +1090,8 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 			CMesh sphereMesh;
 			sphereMesh.mode = CMesh::Mode::Triangles;
 			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));
-			drawMesh(gl, transform, sphereMesh, style, viewProj, light, palette, atlas, presentW,
-					 presentH);
+			drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette, atlas,
+					 presentW, presentH);
 		}
 	};
 
@@ -930,8 +1111,14 @@ void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarc
 	}
 
 	glDisable(GL_DEPTH_TEST);
+	if (!(only && onlyCount > 0)) {
+		gl.sweepMeshGpu();
+	}
 
-	if (pixel) {
+	if (offscreen) {
+		glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+		glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+	} else if (pixel) {
 		gl.blitToWindow(viewportW, viewportH);
 		glBindFramebuffer(GL_FRAMEBUFFER, prevFbo);
 	}

@@ -8,6 +8,33 @@ namespace rigkit {
 namespace ecs {
 
 /**
+ * @brief Offscreen color+depth target for a camera present (no component GPU handles).
+ * @details Owned by UI / app code. GLES-safe (`RGBA` + `DEPTH_COMPONENT16`).
+ */
+class MeshPresentTarget {
+  public:
+	MeshPresentTarget() = default;
+	~MeshPresentTarget();
+	MeshPresentTarget(const MeshPresentTarget&) = delete;
+	MeshPresentTarget& operator=(const MeshPresentTarget&) = delete;
+
+	bool resize(int w, int h);
+	void destroy();
+
+	unsigned fbo() const { return m_fbo; }
+	unsigned texture() const { return m_color; }
+	int width() const { return m_w; }
+	int height() const { return m_h; }
+
+  private:
+	unsigned m_fbo = 0;
+	unsigned m_color = 0;
+	unsigned m_depth = 0;
+	int m_w = 0;
+	int m_h = 0;
+};
+
+/**
  * @brief Present `CMesh` entities through the active `CCamera` (GLES / desktop GL).
  * @details Calls `SHierarchy` first unless @p resolveHierarchy is false (caller already
  * filled `CTransform::world`). No-op without an active camera.
@@ -21,6 +48,16 @@ namespace ecs {
 void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarchy = true,
 					const entt::entity* only = nullptr, std::size_t onlyCount = 0,
 					int originX = 0, int originY = 0);
+
+/**
+ * @brief Present through a specific camera (active flag ignored).
+ * @param targetFbo 0 = current / window framebuffer. Non-zero binds that FBO,
+ *        draws at 0,0,@p viewportW,@p viewportH, then restores.
+ */
+void SMeshPresent3D(MEcs& ecs, entt::entity camera, int viewportW, int viewportH,
+					bool resolveHierarchy = true, const entt::entity* only = nullptr,
+					std::size_t onlyCount = 0, int originX = 0, int originY = 0,
+					unsigned targetFbo = 0);
 
 /**
  * @brief Widest aliased line this GL driver will draw, in pixels.
