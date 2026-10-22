@@ -6,7 +6,9 @@
 
 Code pack - GLES mesh present over [rigComponent](https://github.com/rigkid/rigComponent) `CCamera` + `CMesh` (`faceColors` / `facePalette` + `CPalette` ramps, optional `CIndexedAtlas` + `texcoords`) + `CDrawStyle`, with optional `CLight` (banded shade by default; ordered Bayer dither optional). Optional low-res present via `CCamera::presentWidth` / `presentHeight` (nearest upscale). Corner FPS is host `GraphicsSettings::showFps`, not this pack. Pi floor: same shader path as host GLES2 / ANGLE.
 
-`CMesh::texcoords` alone are not enough: without a scene `CIndexedAtlas`, UVs are ignored and albedo stays face/style colors.
+`CMesh::texcoords` on the Lambert path need a scene `CIndexedAtlas`. Albedo stays face or style color without one.
+
+`CRenderMaterial` (`rig.render.material`) on a triangle mesh or `CSphere` takes the surface path: albedo map (`CAssetRef` image), metallic, roughness, emissive, GGX, ACES into the 8-bit target. `CRenderEnvironment` (`rig.render.environment`) points `hdri` at a `CAssetRef` lat-long Radiance image; this pack projects that image to L2 irradiance. A directional light gets a 1024 shadow map (3 by 3 PCF) and the frame gets half-resolution SSAO when a depth texture can be allocated. Both stay off when it cannot. Point lights are not shadowed. Specular from the HDRI is that same low-order lobe.
 
 ## Build Example
 

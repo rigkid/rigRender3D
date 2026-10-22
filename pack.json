@@ -8,7 +8,8 @@
   "description": "GLES mesh present over CCamera + CMesh (Pi floor).",
   "dependencies": [
     "rigComponent",
-    "rigSystems"
+    "rigSystems",
+    "rigImage"
   ],
   "include_paths": [
     "src"

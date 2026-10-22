@@ -27,15 +27,32 @@ if(NOT TARGET rigSystems)
 	endif()
 endif()
 
+if(NOT TARGET rigImage)
+	if(DEFINED RIGKIT_ROOT AND NOT RIGKIT_ROOT STREQUAL "")
+		set(_rigImage_dir "${RIGKIT_ROOT}/packs/rigImage")
+	else()
+		set(_rigImage_dir "${CMAKE_SOURCE_DIR}/packs/rigImage")
+	endif()
+	if(EXISTS "${_rigImage_dir}/CMakeLists.txt")
+		add_subdirectory("${_rigImage_dir}" "${CMAKE_BINARY_DIR}/packs/rigImage")
+	else()
+		message(FATAL_ERROR "rigRender3D requires rigImage under packs/rigImage")
+	endif()
+endif()
+
 add_library(${PACK_NAME} STATIC
 	src/rigRender3D.cpp
 	src/rigRender3D.h
 	src/SMeshPresent3D.cpp
 	src/SMeshPresent3D.h
+	src/SurfacePass.cpp
+	src/SurfacePass.h
+	src/SurfaceIbl.h
 	src/shaders/BlitShader.h
 	src/shaders/MeshShader.h
+	src/shaders/SurfaceShader.h
 )
-target_link_libraries(${PACK_NAME} PUBLIC rigkit rigComponent rigSystems)
+target_link_libraries(${PACK_NAME} PUBLIC rigkit rigComponent rigSystems rigImage)
 target_include_directories(${PACK_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
 )

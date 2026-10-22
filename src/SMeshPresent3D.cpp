@@ -8,12 +8,14 @@
 #include "CLight.h"
 #include "CMesh.h"
 #include "CPalette.h"
+#include "CRenderMaterial.h"
 #include "CSelection.h"
 #include "CSphere.h"
 #include "CTransform.h"
 #include "CVertexSelection.h"
 #include "MeshFaces.h"
 #include "PrimitiveVertices3D.h"
+#include "SurfacePass.h"
 #include "shaders/BlitShader.h"
 #include "shaders/MeshShader.h"
 #include "SHierarchy.h"
@@ -22,6 +24,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
@@ -1005,7 +1008,22 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 	const int presentH = pixel ? cam.presentHeight : viewportH;
 	const float aspect = static_cast<float>(presentW) / static_cast<float>(presentH);
 	const glm::mat4 viewProj = cam.projectionMatrix(aspect) * CCamera::viewMatrix(camXf);
+	const glm::mat4 invViewProj = glm::inverse(viewProj);
+	const glm::vec3 cameraPos(camXf.world[3]);
 	const LightFrame light = findLight(ecs);
+	SurfaceLight surfaceLight;
+	surfaceLight.mode = light.mode;
+	surfaceLight.dir = light.dir;
+	surfaceLight.pos = light.pos;
+	surfaceLight.color = light.color;
+	surfaceLight.intensity = light.intensity;
+	surfaceLight.ambient = light.ambient;
+	const bool surfaceOn = sceneHasSurface(ecs) && surfaceShadersOk();
+	SurfaceFrame surfaceFrame;
+	if (surfaceOn) {
+		surfaceFrame = beginSurfaceFrame(ecs, surfaceLight, viewProj, invViewProj, cameraPos, presentW,
+										 presentH, originX, originY);
+	}
 	const CPalette* palette = findPalette(ecs);
 	const CIndexedAtlas* atlas = findAtlas(ecs);
 
@@ -1064,8 +1082,14 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 		const auto& style = ecs.getComponent<CDrawStyle>(entity);
 		if (ecs.hasComponent<CMesh>(entity)) {
 			const auto& mesh = ecs.getComponent<CMesh>(entity);
-			drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
-					 presentH);
+			if (surfaceOn && mesh.mode == CMesh::Mode::Triangles &&
+				ecs.hasComponent<CRenderMaterial>(entity)) {
+				drawSurfaceMesh(ecs, entity, transform, mesh, ecs.getComponent<CRenderMaterial>(entity),
+								viewProj, surfaceLight, surfaceFrame);
+			} else {
+				drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
+						 presentH);
+			}
 			const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
 								 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
 			const bool vertSel = ecs.hasComponent<CVertexSelection>(entity) &&
@@ -1090,8 +1114,14 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 			CMesh sphereMesh;
 			sphereMesh.mode = CMesh::Mode::Triangles;
 			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));
-			drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette, atlas,
-					 presentW, presentH);
+			if (surfaceOn && ecs.hasComponent<CRenderMaterial>(entity)) {
+				drawSurfaceMesh(ecs, entity, transform, sphereMesh,
+								ecs.getComponent<CRenderMaterial>(entity), viewProj, surfaceLight,
+								surfaceFrame);
+			} else {
+				drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette, atlas,
+						 presentW, presentH);
+			}
 		}
 	};
 
