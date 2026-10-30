@@ -685,16 +685,19 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 		if (gpu->vbo && gpu->stamp == stamp && gpu->nVerts > 0) {
 			if (mode == GL_LINES) {
 				glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
+				// Toolpath / zone wires are CAD overlays: frustum only. Depth
+				// test against a metres-long far plane eats distant hairlines
+				// on 24-bit GLES depth even when the far plane is correct.
+				glDisable(GL_DEPTH_TEST);
 				glDepthMask(GL_FALSE);
-				glDepthFunc(GL_LEQUAL);
 			}
 			setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
 			gl.bindMeshVbo(gpu->vbo);
 			glDrawArrays(mode, 0, gpu->nVerts);
 			glBindVertexArray(0);
 			if (mode == GL_LINES) {
-				glDepthFunc(GL_LESS);
 				glDepthMask(GL_TRUE);
+				glEnable(GL_DEPTH_TEST);
 				glLineWidth(1.0f);
 			}
 			return;
@@ -719,10 +722,8 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 	if (mode == GL_LINES) {
 		// Over the driver's cap glLineWidth is an error, so clamp rather than trust.
 		glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
-		// Hairlines do not write depth, so a near wire cannot punch a hole
-		// through farther strokes when the far/near ratio is large.
+		glDisable(GL_DEPTH_TEST);
 		glDepthMask(GL_FALSE);
-		glDepthFunc(GL_LEQUAL);
 	}
 
 	setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
@@ -742,8 +743,8 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 	glDrawArrays(mode, 0, static_cast<GLsizei>(verts.size() / 10));
 	glBindVertexArray(0);
 	if (mode == GL_LINES) {
-		glDepthFunc(GL_LESS);
 		glDepthMask(GL_TRUE);
+		glEnable(GL_DEPTH_TEST);
 		glLineWidth(1.0f);
 	}
 }
