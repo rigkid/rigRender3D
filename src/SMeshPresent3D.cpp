@@ -15,17 +15,17 @@
 #include "CVertexSelection.h"
 #include "MeshFaces.h"
 #include "PrimitiveVertices3D.h"
+#include "SHierarchy.h"
 #include "SurfacePass.h"
 #include "shaders/BlitShader.h"
 #include "shaders/MeshShader.h"
-#include "SHierarchy.h"
 
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <glm/gtc/matrix_inverse.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <spdlog/spdlog.h>
 #include <unordered_map>
 #include <vector>
@@ -36,8 +36,8 @@ namespace {
 
 float bayer4(int x, int y) {
 	static constexpr float k[16] = {
-		0.f / 16.f,  8.f / 16.f,  2.f / 16.f, 10.f / 16.f, 12.f / 16.f, 4.f / 16.f,
-		14.f / 16.f, 6.f / 16.f,  3.f / 16.f, 11.f / 16.f, 1.f / 16.f,  9.f / 16.f,
+		0.f / 16.f,	 8.f / 16.f, 2.f / 16.f,  10.f / 16.f, 12.f / 16.f, 4.f / 16.f,
+		14.f / 16.f, 6.f / 16.f, 3.f / 16.f,  11.f / 16.f, 1.f / 16.f,	9.f / 16.f,
 		15.f / 16.f, 7.f / 16.f, 13.f / 16.f, 5.f / 16.f,
 	};
 	return k[static_cast<size_t>(((y & 3) << 2) | (x & 3))];
@@ -249,7 +249,7 @@ struct Present3DGl {
 
 		const float quad[] = {
 			-1.f, -1.f, 0.f, 0.f, 1.f, -1.f, 1.f, 0.f, -1.f, 1.f, 0.f, 1.f,
-			-1.f, 1.f,  0.f, 1.f, 1.f, -1.f, 1.f, 0.f, 1.f,  1.f, 1.f, 1.f,
+			-1.f, 1.f,	0.f, 1.f, 1.f, -1.f, 1.f, 0.f, 1.f,	 1.f, 1.f, 1.f,
 		};
 		glGenVertexArrays(1, &blitVao);
 		glGenBuffers(1, &blitVbo);
@@ -518,8 +518,7 @@ void buildTriangleVerts(const CMesh& mesh, const CDrawStyle& style, const CPalet
 		}
 		const glm::vec3 nLocal = faceNormal(p[i0], p[i1], p[i2]);
 		const glm::vec3 nWorld = glm::normalize(glm::mat3(world) * nLocal);
-		const glm::vec3 center =
-			glm::vec3(world * glm::vec4((p[i0] + p[i1] + p[i2]) / 3.0f, 1.0f));
+		const glm::vec3 center = glm::vec3(world * glm::vec4((p[i0] + p[i1] + p[i2]) / 3.0f, 1.0f));
 
 		glm::vec4 c;
 		int idx = -1;
@@ -561,8 +560,7 @@ void buildTriangleVerts(const CMesh& mesh, const CDrawStyle& style, const CPalet
 				}
 				// Ambient gates hard black: cap how many shadeNext steps we walk.
 				const float amb = std::clamp(light.ambient, 0.f, 1.f);
-				const int maxDarker =
-					static_cast<int>(std::floor((1.f - amb) * maxT + 1e-4f));
+				const int maxDarker = static_cast<int>(std::floor((1.f - amb) * maxT + 1e-4f));
 				int darker = (bands - 1) - step;
 				if (darker > maxDarker) {
 					darker = maxDarker;
@@ -667,10 +665,9 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 		return;
 	}
 
-	const bool hasAtlasAlbedo =
-		palette && atlas && mesh.texcoords.size() == mesh.positions.size();
-	const bool bakePaletteShade = palette && light.mode != 0 && light.banded &&
-								  (!mesh.facePalette.empty() || hasAtlasAlbedo);
+	const bool hasAtlasAlbedo = palette && atlas && mesh.texcoords.size() == mesh.positions.size();
+	const bool bakePaletteShade =
+		palette && light.mode != 0 && light.banded && (!mesh.facePalette.empty() || hasAtlasAlbedo);
 	if (mesh.mode == CMesh::Mode::Triangles && !style.hasFill && mesh.faceColors.empty() &&
 		mesh.facePalette.empty() && !hasAtlasAlbedo) {
 		return;
@@ -688,12 +685,16 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 		if (gpu->vbo && gpu->stamp == stamp && gpu->nVerts > 0) {
 			if (mode == GL_LINES) {
 				glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
+				glDepthMask(GL_FALSE);
+				glDepthFunc(GL_LEQUAL);
 			}
 			setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
 			gl.bindMeshVbo(gpu->vbo);
 			glDrawArrays(mode, 0, gpu->nVerts);
 			glBindVertexArray(0);
 			if (mode == GL_LINES) {
+				glDepthFunc(GL_LESS);
+				glDepthMask(GL_TRUE);
 				glLineWidth(1.0f);
 			}
 			return;
@@ -718,6 +719,10 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 	if (mode == GL_LINES) {
 		// Over the driver's cap glLineWidth is an error, so clamp rather than trust.
 		glLineWidth(std::clamp(style.strokeWidth, 1.0f, maxAliasedLineWidth()));
+		// Hairlines do not write depth, so a near wire cannot punch a hole
+		// through farther strokes when the far/near ratio is large.
+		glDepthMask(GL_FALSE);
+		glDepthFunc(GL_LEQUAL);
 	}
 
 	setMeshLightUniforms(gl, transform, viewProj, light, lightMode);
@@ -737,6 +742,8 @@ void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, con
 	glDrawArrays(mode, 0, static_cast<GLsizei>(verts.size() / 10));
 	glBindVertexArray(0);
 	if (mode == GL_LINES) {
+		glDepthFunc(GL_LESS);
+		glDepthMask(GL_TRUE);
 		glLineWidth(1.0f);
 	}
 }
@@ -1021,8 +1028,8 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 	const bool surfaceOn = sceneHasSurface(ecs) && surfaceShadersOk();
 	SurfaceFrame surfaceFrame;
 	if (surfaceOn) {
-		surfaceFrame = beginSurfaceFrame(ecs, surfaceLight, viewProj, invViewProj, cameraPos, presentW,
-										 presentH, originX, originY);
+		surfaceFrame = beginSurfaceFrame(ecs, surfaceLight, viewProj, invViewProj, cameraPos,
+										 presentW, presentH, originX, originY);
 	}
 	const CPalette* palette = findPalette(ecs);
 	const CIndexedAtlas* atlas = findAtlas(ecs);
@@ -1084,11 +1091,12 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 			const auto& mesh = ecs.getComponent<CMesh>(entity);
 			if (surfaceOn && mesh.mode == CMesh::Mode::Triangles &&
 				ecs.hasComponent<CRenderMaterial>(entity)) {
-				drawSurfaceMesh(ecs, entity, transform, mesh, ecs.getComponent<CRenderMaterial>(entity),
-								viewProj, surfaceLight, surfaceFrame);
+				drawSurfaceMesh(ecs, entity, transform, mesh,
+								ecs.getComponent<CRenderMaterial>(entity), viewProj, surfaceLight,
+								surfaceFrame);
 			} else {
-				drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
-						 presentH);
+				drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas,
+						 presentW, presentH);
 			}
 			const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
 								 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
@@ -1099,8 +1107,8 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 								  viewProj);
 			}
 			if (vertSel) {
-				drawVertexSelection(gl, transform, mesh,
-									ecs.getComponent<CVertexSelection>(entity), viewProj);
+				drawVertexSelection(gl, transform, mesh, ecs.getComponent<CVertexSelection>(entity),
+									viewProj);
 			}
 			if (!faceSel && !vertSel && ecs.hasComponent<CSelection>(entity)) {
 				const auto& sel = ecs.getComponent<CSelection>(entity);
@@ -1119,8 +1127,8 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 								ecs.getComponent<CRenderMaterial>(entity), viewProj, surfaceLight,
 								surfaceFrame);
 			} else {
-				drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette, atlas,
-						 presentW, presentH);
+				drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette,
+						 atlas, presentW, presentH);
 			}
 		}
 	};
