@@ -7,9 +7,21 @@
   "license": "MIT Rigkid Contributors",
   "description": "GLES mesh present over CCamera + CMesh (Pi floor).",
   "dependencies": [
-    "rigComponent",
-    "rigSystems",
-    "rigImage"
+    {
+      "name": "rigComponent",
+      "url": "https://github.com/rigkid/rigComponent.git",
+      "ref": "main"
+    },
+    {
+      "name": "rigSystems",
+      "url": "https://github.com/rigkid/rigSystems.git",
+      "ref": "main"
+    },
+    {
+      "name": "rigImage",
+      "url": "https://github.com/rigkid/rigImage.git",
+      "ref": "main"
+    }
   ],
   "include_paths": [
     "src"
