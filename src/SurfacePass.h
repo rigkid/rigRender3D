@@ -7,8 +7,8 @@
  * an albedo texture, GGX, emissive, ACES into the 8-bit target, L2 irradiance from
  * `CRenderEnvironment`, a directional 3x3 PCF shadow, and SSAO. Shadow and SSAO
  * turn off when the GL context cannot allocate a depth texture. Specular from the
- * HDR is the same low-order lobe, not a prefiltered cubemap. Point lights are not
- * shadowed.
+ * HDR is the same low-order lobe, not a prefiltered cubemap. Point and spot lights
+ * are not shadowed. Spot uses position + local -Z with inner/outer cone falloff.
  */
 
 #include <glm/glm.hpp>
@@ -23,12 +23,15 @@ namespace rigkit {
 namespace ecs {
 
 struct SurfaceLight {
-	int mode = 0;
+	int mode = 0; ///< 1 directional, 2 point, 3 spot
 	glm::vec3 dir{0.f, -1.f, 0.f};
 	glm::vec3 pos{0.f};
 	glm::vec3 color{1.f};
 	float intensity = 1.f;
 	float ambient = 0.35f;
+	float cosInner = 1.f;
+	float cosOuter = 0.7071f;
+	float range = 0.f;
 };
 
 struct SurfaceFrame {

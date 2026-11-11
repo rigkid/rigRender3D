@@ -159,6 +159,7 @@ inline constexpr const char* kSurfaceFragmentBody = R"GLSL(
 uniform vec4 uLightDirMode;
 uniform vec4 uLightPosI;
 uniform vec4 uLightColorAmb;
+uniform vec4 uLightCone;
 uniform vec4 uAlbedoMetal;
 uniform vec4 uEmissiveRough;
 uniform vec4 uShadowAo;
@@ -235,7 +236,25 @@ void main() {
 
 	vec3 L;
 	float atten = 1.0;
-	if (uLightDirMode.w > 1.5) {
+	if (uLightDirMode.w > 2.5) {
+		vec3 toL = uLightPosI.xyz - vWorld;
+		float dist = length(toL);
+		L = dist > 0.0001 ? toL / dist : vec3(0.0, 1.0, 0.0);
+		atten = 1.0 / (1.0 + dist * dist);
+		float range = uLightCone.z;
+		if (range > 0.0) {
+			float t = clamp(dist / range, 0.0, 1.0);
+			atten *= (1.0 - t) * (1.0 - t);
+		}
+		vec3 axis = uLightDirMode.xyz;
+		float a2 = dot(axis, axis);
+		axis = a2 > 0.000001 ? axis * inversesqrt(a2) : vec3(0.0, -1.0, 0.0);
+		float cosTheta = clamp(dot(-L, axis), -1.0, 1.0);
+		float cosInner = uLightCone.x;
+		float cosOuter = uLightCone.y;
+		float denom = max(cosInner - cosOuter, 0.0001);
+		atten *= clamp((cosTheta - cosOuter) / denom, 0.0, 1.0);
+	} else if (uLightDirMode.w > 1.5) {
 		vec3 toL = uLightPosI.xyz - vWorld;
 		float dist = length(toL);
 		L = dist > 0.0001 ? toL / dist : vec3(0.0, 1.0, 0.0);

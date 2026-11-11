@@ -98,6 +98,7 @@ struct Present3DGl {
 	GLint uBanded = -1;
 	GLint uBands = -1;
 	GLint uDither = -1;
+	GLint uLightCone = -1;
 
 	GLuint blitProgram = 0;
 	GLuint blitVao = 0;
@@ -205,6 +206,7 @@ struct Present3DGl {
 		uBanded = glGetUniformLocation(program, "uBanded");
 		uBands = glGetUniformLocation(program, "uBands");
 		uDither = glGetUniformLocation(program, "uDither");
+		uLightCone = glGetUniformLocation(program, "uLightCone");
 
 		constexpr int kStride = 10;
 		glGenVertexArrays(1, &vao);
@@ -358,7 +360,7 @@ Present3DGl& glState() {
 }
 
 struct LightFrame {
-	int mode = 0;
+	int mode = 0; ///< 1 directional, 2 point, 3 spot
 	glm::vec3 dir{0.0f, -1.0f, 0.0f};
 	glm::vec3 pos{0.0f};
 	glm::vec3 color{1.0f};
@@ -367,7 +369,21 @@ struct LightFrame {
 	bool banded = true;
 	int bands = 3;
 	bool dither = false;
+	float cosInner = 1.0f;
+	float cosOuter = 0.7071f;
+	float range = 0.0f;
 };
+
+void fillSpotCone(LightFrame& out, const CLight& light) {
+	out.range = std::max(0.f, light.range);
+	const float outerDeg = std::clamp(light.outerConeDegrees, 0.1f, 89.f);
+	const float innerDeg = std::clamp(light.innerConeDegrees, 0.f, outerDeg);
+	out.cosOuter = std::cos(glm::radians(outerDeg));
+	out.cosInner = std::cos(glm::radians(innerDeg));
+	if (out.cosInner < out.cosOuter + 1e-4f) {
+		out.cosInner = std::min(1.f, out.cosOuter + 1e-3f);
+	}
+}
 
 LightFrame findLight(MEcs& ecs) {
 	LightFrame out;
@@ -384,11 +400,15 @@ LightFrame findLight(MEcs& ecs) {
 		out.banded = light.banded;
 		out.bands = std::clamp(light.bands, 2, 4);
 		out.dither = light.dither;
-		if (light.type == CLight::Type::Point || light.type == CLight::Type::Spot) {
-			// Spot cone is reserved on the POD; present still uses the point path.
-			out.mode = 2;
+		if (light.type == CLight::Type::Spot) {
+			out.mode = 3;
 			out.pos = CLight::position(xf);
 			out.dir = CLight::direction(xf);
+			fillSpotCone(out, light);
+		} else if (light.type == CLight::Type::Point) {
+			out.mode = 2;
+			out.pos = CLight::position(xf);
+			out.range = std::max(0.f, light.range);
 		} else {
 			out.mode = 1;
 			out.dir = CLight::direction(xf);
@@ -661,6 +681,7 @@ void setMeshLightUniforms(Present3DGl& gl, const CTransform& transform, const gl
 	glUniform1f(gl.uBanded, light.banded ? 1.0f : 0.0f);
 	glUniform1f(gl.uBands, static_cast<float>(light.bands));
 	glUniform1f(gl.uDither, light.dither ? 1.0f : 0.0f);
+	glUniform3f(gl.uLightCone, light.cosInner, light.cosOuter, light.range);
 }
 
 void drawMesh(Present3DGl& gl, entt::entity id, const CTransform& transform, const CMesh& mesh,
@@ -1031,6 +1052,9 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 	surfaceLight.color = light.color;
 	surfaceLight.intensity = light.intensity;
 	surfaceLight.ambient = light.ambient;
+	surfaceLight.cosInner = light.cosInner;
+	surfaceLight.cosOuter = light.cosOuter;
+	surfaceLight.range = light.range;
 	const bool surfaceOn = sceneHasSurface(ecs) && surfaceShadersOk();
 	SurfaceFrame surfaceFrame;
 	if (surfaceOn) {

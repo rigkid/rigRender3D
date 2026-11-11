@@ -48,6 +48,7 @@ struct SurfaceGl {
 	GLint uLightDirMode = -1;
 	GLint uLightPosI = -1;
 	GLint uLightColorAmb = -1;
+	GLint uLightCone = -1;
 	GLint uAlbedoMetal = -1;
 	GLint uEmissiveRough = -1;
 	GLint uShadowAo = -1;
@@ -273,6 +274,7 @@ bool ensure(SurfaceGl& gl) {
 	gl.uLightDirMode = glGetUniformLocation(gl.surfaceProg, "uLightDirMode");
 	gl.uLightPosI = glGetUniformLocation(gl.surfaceProg, "uLightPosI");
 	gl.uLightColorAmb = glGetUniformLocation(gl.surfaceProg, "uLightColorAmb");
+	gl.uLightCone = glGetUniformLocation(gl.surfaceProg, "uLightCone");
 	gl.uAlbedoMetal = glGetUniformLocation(gl.surfaceProg, "uAlbedoMetal");
 	gl.uEmissiveRough = glGetUniformLocation(gl.surfaceProg, "uEmissiveRough");
 	gl.uShadowAo = glGetUniformLocation(gl.surfaceProg, "uShadowAo");
@@ -839,6 +841,7 @@ void drawSurfaceMesh(MEcs& ecs, entt::entity id, const CTransform& transform, co
 	glUniform4f(gl.uLightDirMode, light.dir.x, light.dir.y, light.dir.z, static_cast<float>(light.mode));
 	glUniform4f(gl.uLightPosI, light.pos.x, light.pos.y, light.pos.z, light.intensity);
 	glUniform4f(gl.uLightColorAmb, light.color.x, light.color.y, light.color.z, light.ambient);
+	glUniform4f(gl.uLightCone, light.cosInner, light.cosOuter, light.range, 0.f);
 	glUniform4f(gl.uAlbedoMetal, material.albedoR, material.albedoG, material.albedoB, material.metallic);
 	glUniform4f(gl.uEmissiveRough, material.emissiveR, material.emissiveG, material.emissiveB,
 				material.roughness);

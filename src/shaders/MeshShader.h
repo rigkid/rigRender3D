@@ -9,8 +9,10 @@ namespace shaders {
  * @details Per-vertex position/normal/color in, per-fragment Lambert with optional
  * banded (posterized) shade and ordered (Bayer) dither on the band thresholds - see
  * `SMeshPresent3D.cpp` for the uniform contract (`uMvp`, `uModel`, `uLight*`, `uAmbient`,
- * `uBanded`, `uBands`, `uDither`). Kept as plain GLSL text so any pack presenting
- * `CMesh` + `CLight` can reuse the same lighting model without re-deriving it.
+ * `uBanded`, `uBands`, `uDither`, `uLightCone`). Spot mode uses `uLightPos` +
+ * `uLightDir` with `uLightCone` = (cosInner, cosOuter, range). Kept as plain GLSL
+ * text so any pack presenting `CMesh` + `CLight` can reuse the same lighting model
+ * without re-deriving it.
  */
 
 inline constexpr const char* kMeshVertexGLES = R"GLSL(#version 100
@@ -42,6 +44,7 @@ uniform float uLightMode;
 uniform float uBanded;
 uniform float uBands;
 uniform float uDither;
+uniform vec3 uLightCone;
 varying vec3 vNormal;
 varying vec3 vWorldPos;
 varying vec4 vColor;
@@ -73,12 +76,25 @@ void main() {
 	}
 	vec3 N = normalize(vNormal);
 	vec3 L;
-	if (uLightMode > 1.5) {
+	float atten = 1.0;
+	if (uLightMode > 2.5) {
+		vec3 toL = uLightPos - vWorldPos;
+		float dist = length(toL);
+		L = dist > 0.0001 ? toL / dist : vec3(0.0, 1.0, 0.0);
+		if (uLightCone.z > 0.0) {
+			float t = clamp(dist / uLightCone.z, 0.0, 1.0);
+			atten *= (1.0 - t) * (1.0 - t);
+		}
+		vec3 axis = normalize(uLightDir);
+		float cosTheta = clamp(dot(-L, axis), -1.0, 1.0);
+		float denom = max(uLightCone.x - uLightCone.y, 0.0001);
+		atten *= clamp((cosTheta - uLightCone.y) / denom, 0.0, 1.0);
+	} else if (uLightMode > 1.5) {
 		L = normalize(uLightPos - vWorldPos);
 	} else {
 		L = normalize(-uLightDir);
 	}
-	float ndl = max(dot(N, L), 0.0) * uLightIntensity;
+	float ndl = max(dot(N, L), 0.0) * uLightIntensity * atten;
 	ndl = clamp(ndl, 0.0, 1.0);
 	float shade;
 	if (uBanded > 0.5) {
@@ -138,6 +154,7 @@ uniform float uLightMode;
 uniform float uBanded;
 uniform float uBands;
 uniform float uDither;
+uniform vec3 uLightCone;
 float bayer4(vec2 p) {
 	ivec2 i = ivec2(mod(floor(p), 4.0));
 	int idx = i.y * 4 + i.x;
@@ -155,8 +172,26 @@ void main() {
 		return;
 	}
 	vec3 N = normalize(vNormal);
-	vec3 L = (uLightMode > 1.5) ? normalize(uLightPos - vWorldPos) : normalize(-uLightDir);
-	float ndl = clamp(max(dot(N, L), 0.0) * uLightIntensity, 0.0, 1.0);
+	vec3 L;
+	float atten = 1.0;
+	if (uLightMode > 2.5) {
+		vec3 toL = uLightPos - vWorldPos;
+		float dist = length(toL);
+		L = dist > 0.0001 ? toL / dist : vec3(0.0, 1.0, 0.0);
+		if (uLightCone.z > 0.0) {
+			float t = clamp(dist / uLightCone.z, 0.0, 1.0);
+			atten *= (1.0 - t) * (1.0 - t);
+		}
+		vec3 axis = normalize(uLightDir);
+		float cosTheta = clamp(dot(-L, axis), -1.0, 1.0);
+		float denom = max(uLightCone.x - uLightCone.y, 0.0001);
+		atten *= clamp((cosTheta - uLightCone.y) / denom, 0.0, 1.0);
+	} else if (uLightMode > 1.5) {
+		L = normalize(uLightPos - vWorldPos);
+	} else {
+		L = normalize(-uLightDir);
+	}
+	float ndl = clamp(max(dot(N, L), 0.0) * uLightIntensity * atten, 0.0, 1.0);
 	float shade;
 	if (uBanded > 0.5) {
 		float b = max(uBands, 2.0);
