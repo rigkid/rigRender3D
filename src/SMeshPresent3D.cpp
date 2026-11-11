@@ -5,10 +5,12 @@
 #include "CDrawStyle.h"
 #include "CFaceSelection.h"
 #include "CIndexedAtlas.h"
+#include "CInstance.h"
 #include "CLight.h"
 #include "CMesh.h"
 #include "CPalette.h"
 #include "CRenderMaterial.h"
+#include "CRenderVisibility.h"
 #include "CSelection.h"
 #include "CSphere.h"
 #include "CTransform.h"
@@ -1081,56 +1083,90 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	auto isVisible = [&](entt::entity entity) {
+		return !ecs.hasComponent<CRenderVisibility>(entity) ||
+			   ecs.getComponent<CRenderVisibility>(entity).visible;
+	};
+
+	auto drawMeshEntity = [&](entt::entity entity, const CTransform& transform, const CMesh& mesh,
+							  const CDrawStyle& style, const CRenderMaterial* material) {
+		if (surfaceOn && mesh.mode == CMesh::Mode::Triangles && material) {
+			drawSurfaceMesh(ecs, entity, transform, mesh, *material, viewProj, surfaceLight,
+							surfaceFrame);
+		} else {
+			drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
+					 presentH);
+		}
+		if (!ecs.registry().valid(entity)) {
+			return;
+		}
+		const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
+							 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
+		const bool vertSel = ecs.hasComponent<CVertexSelection>(entity) &&
+							 !ecs.getComponent<CVertexSelection>(entity).vertices.empty();
+		if (faceSel) {
+			drawFaceSelection(gl, transform, mesh, ecs.getComponent<CFaceSelection>(entity),
+							  viewProj);
+		}
+		if (vertSel) {
+			drawVertexSelection(gl, transform, mesh, ecs.getComponent<CVertexSelection>(entity),
+								viewProj);
+		}
+		if (!faceSel && !vertSel && ecs.hasComponent<CSelection>(entity)) {
+			const auto& sel = ecs.getComponent<CSelection>(entity);
+			if (sel.isSelected || sel.isMultiSelected) {
+				drawObjectWireframe(gl, transform, mesh, viewProj);
+			}
+		}
+	};
+
 	auto drawOne = [&](entt::entity entity) {
 		if (!ecs.registry().valid(entity) || !ecs.hasComponent<CTransform>(entity) ||
-			!ecs.hasComponent<CDrawStyle>(entity)) {
+			!isVisible(entity)) {
 			return;
 		}
 		const auto& transform = ecs.getComponent<CTransform>(entity);
+		if (ecs.hasComponent<CInstance>(entity)) {
+			const auto source = ecs.getComponent<CInstance>(entity).source;
+			if (!ecs.registry().valid(source) || !ecs.hasComponent<CMesh>(source) ||
+				!isVisible(source)) {
+				return;
+			}
+			CDrawStyle style;
+			if (ecs.hasComponent<CDrawStyle>(source)) {
+				style = ecs.getComponent<CDrawStyle>(source);
+			} else {
+				style.setFillColor(0.8f, 0.8f, 0.8f);
+				style.hasStroke = false;
+			}
+			const CRenderMaterial* material =
+				ecs.hasComponent<CRenderMaterial>(source)
+					? &ecs.getComponent<CRenderMaterial>(source)
+					: nullptr;
+			drawMeshEntity(entity, transform, ecs.getComponent<CMesh>(source), style, material);
+			return;
+		}
+		if (!ecs.hasComponent<CDrawStyle>(entity)) {
+			return;
+		}
 		const auto& style = ecs.getComponent<CDrawStyle>(entity);
 		if (ecs.hasComponent<CMesh>(entity)) {
-			const auto& mesh = ecs.getComponent<CMesh>(entity);
-			if (surfaceOn && mesh.mode == CMesh::Mode::Triangles &&
-				ecs.hasComponent<CRenderMaterial>(entity)) {
-				drawSurfaceMesh(ecs, entity, transform, mesh,
-								ecs.getComponent<CRenderMaterial>(entity), viewProj, surfaceLight,
-								surfaceFrame);
-			} else {
-				drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas,
-						 presentW, presentH);
-			}
-			const bool faceSel = ecs.hasComponent<CFaceSelection>(entity) &&
-								 !ecs.getComponent<CFaceSelection>(entity).faces.empty();
-			const bool vertSel = ecs.hasComponent<CVertexSelection>(entity) &&
-								 !ecs.getComponent<CVertexSelection>(entity).vertices.empty();
-			if (faceSel) {
-				drawFaceSelection(gl, transform, mesh, ecs.getComponent<CFaceSelection>(entity),
-								  viewProj);
-			}
-			if (vertSel) {
-				drawVertexSelection(gl, transform, mesh, ecs.getComponent<CVertexSelection>(entity),
-									viewProj);
-			}
-			if (!faceSel && !vertSel && ecs.hasComponent<CSelection>(entity)) {
-				const auto& sel = ecs.getComponent<CSelection>(entity);
-				if (sel.isSelected || sel.isMultiSelected) {
-					drawObjectWireframe(gl, transform, mesh, viewProj);
-				}
-			}
+			const CRenderMaterial* material =
+				ecs.hasComponent<CRenderMaterial>(entity)
+					? &ecs.getComponent<CRenderMaterial>(entity)
+					: nullptr;
+			drawMeshEntity(entity, transform, ecs.getComponent<CMesh>(entity), style, material);
 		} else if (ecs.hasComponent<CSphere>(entity)) {
 			// Parametric primitive: rebuild the loose triangle soup fresh, same deal as
 			// the 2D shapes in rigSystems - CSphere stays the live data, not CMesh.
 			CMesh sphereMesh;
 			sphereMesh.mode = CMesh::Mode::Triangles;
 			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));
-			if (surfaceOn && ecs.hasComponent<CRenderMaterial>(entity)) {
-				drawSurfaceMesh(ecs, entity, transform, sphereMesh,
-								ecs.getComponent<CRenderMaterial>(entity), viewProj, surfaceLight,
-								surfaceFrame);
-			} else {
-				drawMesh(gl, entt::null, transform, sphereMesh, style, viewProj, light, palette,
-						 atlas, presentW, presentH);
-			}
+			const CRenderMaterial* material =
+				ecs.hasComponent<CRenderMaterial>(entity)
+					? &ecs.getComponent<CRenderMaterial>(entity)
+					: nullptr;
+			drawMeshEntity(entity, transform, sphereMesh, style, material);
 		}
 	};
 
@@ -1145,6 +1181,10 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 		}
 		auto spheres = ecs.view<CTransform, CSphere, CDrawStyle>();
 		for (auto entity : spheres) {
+			drawOne(entity);
+		}
+		auto instances = ecs.view<CTransform, CInstance>();
+		for (auto entity : instances) {
 			drawOne(entity);
 		}
 	}
