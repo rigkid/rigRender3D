@@ -27,6 +27,19 @@ if(NOT TARGET rigSystems)
 	endif()
 endif()
 
+if(NOT TARGET rigAnimComponent)
+	if(DEFINED RIGKIT_ROOT AND NOT RIGKIT_ROOT STREQUAL "")
+		set(_rigAnimComponent_dir "${RIGKIT_ROOT}/packs/rigAnimComponent")
+	else()
+		set(_rigAnimComponent_dir "${CMAKE_SOURCE_DIR}/packs/rigAnimComponent")
+	endif()
+	if(EXISTS "${_rigAnimComponent_dir}/CMakeLists.txt")
+		add_subdirectory("${_rigAnimComponent_dir}" "${CMAKE_BINARY_DIR}/packs/rigAnimComponent")
+	else()
+		message(FATAL_ERROR "rigRender3D requires rigAnimComponent under packs/rigAnimComponent")
+	endif()
+endif()
+
 if(NOT TARGET rigImage)
 	if(DEFINED RIGKIT_ROOT AND NOT RIGKIT_ROOT STREQUAL "")
 		set(_rigImage_dir "${RIGKIT_ROOT}/packs/rigImage")
@@ -52,7 +65,8 @@ add_library(${PACK_NAME} STATIC
 	src/shaders/MeshShader.h
 	src/shaders/SurfaceShader.h
 )
-target_link_libraries(${PACK_NAME} PUBLIC rigkit rigComponent rigSystems rigImage)
+target_link_libraries(${PACK_NAME} PUBLIC rigkit rigComponent rigAnimComponent rigSystems
+	rigImage)
 target_include_directories(${PACK_NAME} PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
 )

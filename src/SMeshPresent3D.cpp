@@ -1,6 +1,7 @@
 #include "SMeshPresent3D.h"
 
 #include "rendering/U_gladGlfw.h"
+#include "CAnimSkin.h"
 #include "CCamera.h"
 #include "CDrawStyle.h"
 #include "CFaceSelection.h"
@@ -383,9 +384,11 @@ LightFrame findLight(MEcs& ecs) {
 		out.banded = light.banded;
 		out.bands = std::clamp(light.bands, 2, 4);
 		out.dither = light.dither;
-		if (light.type == CLight::Type::Point) {
+		if (light.type == CLight::Type::Point || light.type == CLight::Type::Spot) {
+			// Spot cone is reserved on the POD; present still uses the point path.
 			out.mode = 2;
 			out.pos = CLight::position(xf);
+			out.dir = CLight::direction(xf);
 		} else {
 			out.mode = 1;
 			out.dir = CLight::direction(xf);
@@ -1088,14 +1091,70 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 			   ecs.getComponent<CRenderVisibility>(entity).visible;
 	};
 
+	auto skinMesh = [&](entt::entity entity, const CMesh& bind, CMesh& posed) -> bool {
+		if (!ecs.hasComponent<CAnimSkin>(entity)) {
+			return false;
+		}
+		const auto& skin = ecs.getComponent<CAnimSkin>(entity);
+		if (skin.joints.empty() || bind.positions.empty()) {
+			return false;
+		}
+		const size_t jointCount = skin.joints.size();
+		if (skin.inverseBind.size() < jointCount * 16) {
+			return false;
+		}
+		const size_t vertCount = bind.positions.size();
+		if (skin.jointIndices.size() < vertCount * 4 || skin.jointWeights.size() < vertCount * 4) {
+			return false;
+		}
+		std::vector<glm::mat4> paletteMats(jointCount, glm::mat4(1.f));
+		for (size_t j = 0; j < jointCount; ++j) {
+			const auto joint = skin.joints[j];
+			if (!ecs.registry().valid(joint) || !ecs.hasComponent<CTransform>(joint)) {
+				continue;
+			}
+			glm::mat4 ibm(1.f);
+			const float* src = skin.inverseBind.data() + j * 16;
+			std::memcpy(glm::value_ptr(ibm), src, sizeof(float) * 16);
+			paletteMats[j] = ecs.getComponent<CTransform>(joint).world * ibm;
+		}
+		posed = bind;
+		uint32_t stamp = bind.revision;
+		for (size_t v = 0; v < vertCount; ++v) {
+			const glm::vec4 p(bind.positions[v], 1.f);
+			glm::vec4 out(0.f);
+			for (int i = 0; i < 4; ++i) {
+				const size_t slot = v * 4 + static_cast<size_t>(i);
+				const float w = skin.jointWeights[slot];
+				if (w <= 0.f) {
+					continue;
+				}
+				const uint32_t ji = skin.jointIndices[slot];
+				if (ji >= jointCount) {
+					continue;
+				}
+				out += (paletteMats[ji] * p) * w;
+			}
+			posed.positions[v] = {out.x, out.y, out.z};
+			stamp ^= floatBits(out.x) ^ floatBits(out.y) ^ floatBits(out.z);
+		}
+		posed.revision = stamp;
+		return true;
+	};
+
 	auto drawMeshEntity = [&](entt::entity entity, const CTransform& transform, const CMesh& mesh,
 							  const CDrawStyle& style, const CRenderMaterial* material) {
-		if (surfaceOn && mesh.mode == CMesh::Mode::Triangles && material) {
-			drawSurfaceMesh(ecs, entity, transform, mesh, *material, viewProj, surfaceLight,
+		const CMesh* drawMeshPtr = &mesh;
+		CMesh skinned;
+		if (skinMesh(entity, mesh, skinned)) {
+			drawMeshPtr = &skinned;
+		}
+		if (surfaceOn && drawMeshPtr->mode == CMesh::Mode::Triangles && material) {
+			drawSurfaceMesh(ecs, entity, transform, *drawMeshPtr, *material, viewProj, surfaceLight,
 							surfaceFrame);
 		} else {
-			drawMesh(gl, entity, transform, mesh, style, viewProj, light, palette, atlas, presentW,
-					 presentH);
+			drawMesh(gl, entity, transform, *drawMeshPtr, style, viewProj, light, palette, atlas,
+					 presentW, presentH);
 		}
 		if (!ecs.registry().valid(entity)) {
 			return;
