@@ -46,8 +46,8 @@ class MeshPresentTarget {
  * @param originY Framebuffer Y of the GL viewport (OpenGL bottom-left space).
  */
 void SMeshPresent3D(MEcs& ecs, int viewportW, int viewportH, bool resolveHierarchy = true,
-					const entt::entity* only = nullptr, std::size_t onlyCount = 0,
-					int originX = 0, int originY = 0);
+					const entt::entity* only = nullptr, std::size_t onlyCount = 0, int originX = 0,
+					int originY = 0);
 
 /**
  * @brief Present through a specific camera (active flag ignored).

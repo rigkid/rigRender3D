@@ -245,7 +245,8 @@ bool ensure(SurfaceGl& gl) {
 	const char* normalVs = shaders::kNormalVertexGLES;
 	const char* normalFs = shaders::kNormalFragmentGLES;
 	const char* aoVs = shaders::kAoVertexGLES;
-	const std::string fs = fragmentSource(shaders::kSurfaceFragmentPreambleGLES, shaders::kSurfaceFragmentBody);
+	const std::string fs =
+		fragmentSource(shaders::kSurfaceFragmentPreambleGLES, shaders::kSurfaceFragmentBody);
 	const std::string aoFs = fragmentSource(shaders::kAoFragmentGLES, shaders::kAoFragmentBody);
 #else
 	const char* vs = shaders::kSurfaceVertexGL;
@@ -254,7 +255,8 @@ bool ensure(SurfaceGl& gl) {
 	const char* normalVs = shaders::kNormalVertexGL;
 	const char* normalFs = shaders::kNormalFragmentGL;
 	const char* aoVs = shaders::kAoVertexGL;
-	const std::string fs = fragmentSource(shaders::kSurfaceFragmentPreambleGL, shaders::kSurfaceFragmentBody);
+	const std::string fs =
+		fragmentSource(shaders::kSurfaceFragmentPreambleGL, shaders::kSurfaceFragmentBody);
 	const std::string aoFs = fragmentSource(shaders::kAoFragmentGL, shaders::kAoFragmentBody);
 #endif
 
@@ -324,7 +326,8 @@ bool ensure(SurfaceGl& gl) {
 	return true;
 }
 
-void pushVert(std::vector<float>& verts, const glm::vec3& p, const glm::vec3& n, const glm::vec2& uv) {
+void pushVert(std::vector<float>& verts, const glm::vec3& p, const glm::vec3& n,
+			  const glm::vec2& uv) {
 	verts.push_back(p.x);
 	verts.push_back(p.y);
 	verts.push_back(p.z);
@@ -373,7 +376,8 @@ std::vector<float> buildVerts(const CMesh& mesh) {
 		}
 	} else if (mesh.indices.empty()) {
 		for (size_t i = 0; i + 2 < p.size(); i += 3) {
-			emit(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1), static_cast<uint32_t>(i + 2));
+			emit(static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1),
+				 static_cast<uint32_t>(i + 2));
 		}
 	} else {
 		for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
@@ -386,8 +390,8 @@ std::vector<float> buildVerts(const CMesh& mesh) {
 void uploadMesh(SurfaceGl& gl, GLuint vao, const std::vector<float>& verts, int attribs) {
 	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, gl.meshVbo);
-	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data(),
-				 GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+				 verts.data(), GL_DYNAMIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, kStride * sizeof(float), nullptr);
 	if (attribs > 1) {
@@ -441,11 +445,11 @@ bool allocDepth(GLuint& tex, int w, int h) {
 #endif
 	while (glGetError() != GL_NO_ERROR) {
 	}
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, w, h, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT,
-				 nullptr);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, w, h, 0, GL_DEPTH_COMPONENT,
+				 GL_UNSIGNED_SHORT, nullptr);
 	if (glGetError() != GL_NO_ERROR) {
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, w, h, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT,
-					 nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, w, h, 0, GL_DEPTH_COMPONENT,
+					 GL_UNSIGNED_SHORT, nullptr);
 		if (glGetError() != GL_NO_ERROR) {
 			glDeleteTextures(1, &tex);
 			tex = 0;
@@ -574,11 +578,12 @@ bool ensureAo(SurfaceGl& gl, int w, int h) {
 	return true;
 }
 
-void drawCached(MEcs& ecs, SurfaceGl& gl, GLuint vao, int attribs, const glm::mat4& viewProj, GLint uMvp,
-				GLint uModel) {
+void drawCached(MEcs& ecs, SurfaceGl& gl, GLuint vao, int attribs, const glm::mat4& viewProj,
+				GLint uMvp, GLint uModel) {
 	for (const auto& slot : gVerts) {
 		const auto entity = static_cast<entt::entity>(slot.first);
-		if (!ecs.registry().valid(entity) || !ecs.hasComponent<CTransform>(entity) || slot.second.empty()) {
+		if (!ecs.registry().valid(entity) || !ecs.hasComponent<CTransform>(entity) ||
+			slot.second.empty()) {
 			continue;
 		}
 		const glm::mat4& world = ecs.getComponent<CTransform>(entity).world;
@@ -686,8 +691,8 @@ bool surfacePresentFailed() {
 }
 
 SurfaceFrame beginSurfaceFrame(MEcs& ecs, const SurfaceLight& light, const glm::mat4& viewProj,
-							   const glm::mat4& invViewProj, const glm::vec3& cameraPos, int presentW,
-							   int presentH, int originX, int originY) {
+							   const glm::mat4& invViewProj, const glm::vec3& cameraPos,
+							   int presentW, int presentH, int originX, int originY) {
 	SurfaceFrame frame;
 	frame.cameraPos = cameraPos;
 	frame.origin = {static_cast<float>(originX), static_cast<float>(originY)};
@@ -724,7 +729,8 @@ SurfaceFrame beginSurfaceFrame(MEcs& ecs, const SurfaceLight& light, const glm::
 		}
 		dir = glm::normalize(dir);
 		const glm::vec3 eye = -dir * 18.f;
-		const glm::vec3 up = std::abs(dir.y) > 0.9f ? glm::vec3(0.f, 0.f, 1.f) : glm::vec3(0.f, 1.f, 0.f);
+		const glm::vec3 up =
+			std::abs(dir.y) > 0.9f ? glm::vec3(0.f, 0.f, 1.f) : glm::vec3(0.f, 1.f, 0.f);
 		const glm::mat4 lightView = glm::lookAt(eye, glm::vec3(0.f), up);
 		const glm::mat4 lightProj = glm::ortho(-14.f, 14.f, -14.f, 14.f, 0.5f, 48.f);
 		frame.lightViewProj = lightProj * lightView;
@@ -807,8 +813,8 @@ SurfaceFrame beginSurfaceFrame(MEcs& ecs, const SurfaceLight& light, const glm::
 }
 
 void drawSurfaceMesh(MEcs& ecs, entt::entity id, const CTransform& transform, const CMesh& mesh,
-					 const CRenderMaterial& material, const glm::mat4& viewProj, const SurfaceLight& light,
-					 const SurfaceFrame& frame) {
+					 const CRenderMaterial& material, const glm::mat4& viewProj,
+					 const SurfaceLight& light, const SurfaceFrame& frame) {
 	auto& gl = glState();
 	if (!gl.surfaceOk || mesh.mode != CMesh::Mode::Triangles) {
 		return;
@@ -838,16 +844,19 @@ void drawSurfaceMesh(MEcs& ecs, entt::entity id, const CTransform& transform, co
 	for (int i = 0; i < 9; ++i) {
 		glUniform3fv(gl.uSh[i], 1, glm::value_ptr(frame.sh[i]));
 	}
-	glUniform4f(gl.uLightDirMode, light.dir.x, light.dir.y, light.dir.z, static_cast<float>(light.mode));
+	glUniform4f(gl.uLightDirMode, light.dir.x, light.dir.y, light.dir.z,
+				static_cast<float>(light.mode));
 	glUniform4f(gl.uLightPosI, light.pos.x, light.pos.y, light.pos.z, light.intensity);
 	glUniform4f(gl.uLightColorAmb, light.color.x, light.color.y, light.color.z, light.ambient);
 	glUniform4f(gl.uLightCone, light.cosInner, light.cosOuter, light.range, 0.f);
-	glUniform4f(gl.uAlbedoMetal, material.albedoR, material.albedoG, material.albedoB, material.metallic);
+	glUniform4f(gl.uAlbedoMetal, material.albedoR, material.albedoG, material.albedoB,
+				material.metallic);
 	glUniform4f(gl.uEmissiveRough, material.emissiveR, material.emissiveG, material.emissiveB,
 				material.roughness);
 	glUniform4f(gl.uShadowAo, frame.shadow ? 1.f : 0.f, 1.f / static_cast<float>(kShadowSize),
 				frame.ao ? 1.f : 0.f, 0.85f);
-	glUniform4f(gl.uOriginSize, frame.origin.x, frame.origin.y, frame.presentSize.x, frame.presentSize.y);
+	glUniform4f(gl.uOriginSize, frame.origin.x, frame.origin.y, frame.presentSize.x,
+				frame.presentSize.y);
 	glUniform1f(gl.uIblIntensity, frame.ibl ? frame.iblIntensity : 0.f);
 	glUniform1i(gl.uAlbedo, 0);
 	glUniform1i(gl.uShadow, 1);

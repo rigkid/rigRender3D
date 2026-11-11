@@ -66,8 +66,8 @@ bool surfacePresentFailed();
  * @details Call after the present framebuffer and viewport are bound. Restores both.
  */
 SurfaceFrame beginSurfaceFrame(MEcs& ecs, const SurfaceLight& light, const glm::mat4& viewProj,
-							   const glm::mat4& invViewProj, const glm::vec3& cameraPos, int presentW,
-							   int presentH, int originX, int originY);
+							   const glm::mat4& invViewProj, const glm::vec3& cameraPos,
+							   int presentW, int presentH, int originX, int originY);
 
 /** @brief Draw one triangle mesh with the surface program. Lines stay on Lambert. */
 void drawSurfaceMesh(MEcs& ecs, entt::entity id, const CTransform& transform, const CMesh& mesh,

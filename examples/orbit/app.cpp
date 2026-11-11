@@ -1,7 +1,7 @@
 #include "app.h"
 
-#include "core/pack/MPack.h"
 #include "core/RigKitEngine.h"
+#include "core/pack/MPack.h"
 #include "packs/rigComponent/src/CLight.h"
 #include "packs/rigComponent/src/COrbitDrive.h"
 #include "packs/rigComponent/src/CSphere.h"
@@ -86,8 +86,8 @@ void OrbitApp::setup() {
 	orbit.radius = 7.5f;
 	orbit.height = 3.0f;
 	ecs->addComponent<rigkit::ecs::COrbitDrive>(m_camera, orbit);
-	rig::lookAt(ecs->getComponent<rigkit::ecs::CTransform>(m_camera), {0.0f, orbit.height, orbit.radius},
-				{0.0f, 0.0f, 0.0f});
+	rig::lookAt(ecs->getComponent<rigkit::ecs::CTransform>(m_camera),
+				{0.0f, orbit.height, orbit.radius}, {0.0f, 0.0f, 0.0f});
 
 	// Point light so it reads as a moving sun sweeping bands across the facets.
 	m_light =
@@ -118,7 +118,8 @@ void OrbitApp::update(float dt) {
 	if (m_camera != entt::null && ecs->hasComponent<rigkit::ecs::COrbitDrive>(m_camera)) {
 		const auto& orbit = ecs->getComponent<rigkit::ecs::COrbitDrive>(m_camera);
 		const float yaw = m_time * orbit.speed;
-		const glm::vec3 eye{std::sin(yaw) * orbit.radius, orbit.height, std::cos(yaw) * orbit.radius};
+		const glm::vec3 eye{std::sin(yaw) * orbit.radius, orbit.height,
+							std::cos(yaw) * orbit.radius};
 		rig::lookAt(ecs->getComponent<rigkit::ecs::CTransform>(m_camera), eye, {0.0f, 0.0f, 0.0f});
 	}
 
@@ -143,8 +144,8 @@ void OrbitApp::update(float dt) {
 	if (m_moonBox != entt::null && ecs->hasComponent<rigkit::ecs::CTransform>(m_moonBox)) {
 		auto& t = ecs->getComponent<rigkit::ecs::CTransform>(m_moonBox);
 		const float a = 2.1f - m_time * 0.55f;
-		t.position = {std::cos(a) * 3.6f, 0.9f + 0.3f * std::sin(m_time * 0.8f), std::sin(a) * 3.6f};
-		t.setEulerRadians(
-			{0.4f * std::sin(m_time), m_time * 1.1f, 0.2f * std::cos(m_time * 0.7f)});
+		t.position = {std::cos(a) * 3.6f, 0.9f + 0.3f * std::sin(m_time * 0.8f),
+					  std::sin(a) * 3.6f};
+		t.setEulerRadians({0.4f * std::sin(m_time), m_time * 1.1f, 0.2f * std::cos(m_time * 0.7f)});
 	}
 }

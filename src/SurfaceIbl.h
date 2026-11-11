@@ -7,9 +7,9 @@
  * radiance. A uniform radiance of 1 evaluates to pi. No GL.
  */
 
+#include <glm/glm.hpp>
 #include <cmath>
 #include <cstddef>
-#include <glm/glm.hpp>
 
 namespace rigkit {
 namespace ecs {
@@ -76,7 +76,8 @@ inline Sh9 shFromLatlong(const float* rgba, int w, int h) {
 			const float phi = (static_cast<float>(x) + 0.5f) * dPhi;
 			const glm::vec3 dir(sinT * std::sin(phi), cosT, sinT * std::cos(phi));
 			const float* p =
-				rgba + (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 4;
+				rgba +
+				(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 4;
 			const glm::vec3 rad(p[0], p[1], p[2]);
 			for (int i = 0; i < 9; ++i) {
 				radiance.band[i] += rad * shBasis(i, dir) * weight;

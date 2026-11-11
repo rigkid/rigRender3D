@@ -1,5 +1,5 @@
-#include "core/RigKitEngine.h"
 #include "app.h"
+#include "core/RigKitEngine.h"
 
 #include <memory>
 

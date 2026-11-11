@@ -1222,10 +1222,9 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 				style.setFillColor(0.8f, 0.8f, 0.8f);
 				style.hasStroke = false;
 			}
-			const CRenderMaterial* material =
-				ecs.hasComponent<CRenderMaterial>(source)
-					? &ecs.getComponent<CRenderMaterial>(source)
-					: nullptr;
+			const CRenderMaterial* material = ecs.hasComponent<CRenderMaterial>(source)
+												  ? &ecs.getComponent<CRenderMaterial>(source)
+												  : nullptr;
 			drawMeshEntity(entity, transform, ecs.getComponent<CMesh>(source), style, material);
 			return;
 		}
@@ -1234,10 +1233,9 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 		}
 		const auto& style = ecs.getComponent<CDrawStyle>(entity);
 		if (ecs.hasComponent<CMesh>(entity)) {
-			const CRenderMaterial* material =
-				ecs.hasComponent<CRenderMaterial>(entity)
-					? &ecs.getComponent<CRenderMaterial>(entity)
-					: nullptr;
+			const CRenderMaterial* material = ecs.hasComponent<CRenderMaterial>(entity)
+												  ? &ecs.getComponent<CRenderMaterial>(entity)
+												  : nullptr;
 			drawMeshEntity(entity, transform, ecs.getComponent<CMesh>(entity), style, material);
 		} else if (ecs.hasComponent<CSphere>(entity)) {
 			// Parametric primitive: rebuild the loose triangle soup fresh, same deal as
@@ -1245,10 +1243,9 @@ void SMeshPresent3D(MEcs& ecs, entt::entity camEntity, int viewportW, int viewpo
 			CMesh sphereMesh;
 			sphereMesh.mode = CMesh::Mode::Triangles;
 			sphereMesh.positions = verticesOf(ecs.getComponent<CSphere>(entity));
-			const CRenderMaterial* material =
-				ecs.hasComponent<CRenderMaterial>(entity)
-					? &ecs.getComponent<CRenderMaterial>(entity)
-					: nullptr;
+			const CRenderMaterial* material = ecs.hasComponent<CRenderMaterial>(entity)
+												  ? &ecs.getComponent<CRenderMaterial>(entity)
+												  : nullptr;
 			drawMeshEntity(entity, transform, sphereMesh, style, material);
 		}
 	};

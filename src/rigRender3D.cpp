@@ -1,20 +1,17 @@
 #include "rigRender3D.h"
 
+#include "SMeshPresent3D.h"
 #include "core/IMui.h"
-#include "core/pack/PackRegistry.h"
 #include "core/RigKitEngine.h"
+#include "core/pack/PackRegistry.h"
 #include "ecs/MEcs.h"
 #include "ecs/SystemRegistry.h"
-#include "SMeshPresent3D.h"
 
 #include <spdlog/spdlog.h>
 
 namespace rigkit {
 
-rigRender3D::rigRender3D() : IPack("rigRender3D") {
-	
-
-}
+rigRender3D::rigRender3D() : IPack("rigRender3D") {}
 
 bool rigRender3D::init() {
 	spdlog::info("[rigRender3D] init");
@@ -58,8 +55,8 @@ void rigRender3D::setup() {
 					presentH = static_cast<int>(ch * scaleY + 0.5f);
 					originX = static_cast<int>(cx * scaleX + 0.5f);
 					// ImGui / GLFW Y is top-left; OpenGL viewport Y is bottom-left.
-					originY = static_cast<int>(
-						static_cast<float>(fullH) - (cy + ch) * scaleY + 0.5f);
+					originY =
+						static_cast<int>(static_cast<float>(fullH) - (cy + ch) * scaleY + 0.5f);
 					if (presentW < 1) {
 						presentW = 1;
 					}
